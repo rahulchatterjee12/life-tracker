@@ -452,7 +452,14 @@ export default function Home() {
                               <span className="flex items-center gap-1 text-[11px] text-txt-3">
                                 {task.type === 'DEEP_WORK' && <><Clock className="w-3 h-3" /> {task.deepWorkDetails?.targetDurationMinutes}m</>}
                                 {task.type === 'HABIT' && <><Flame className="w-3 h-3" /> {task.habitDetails?.streakCount}d streak</>}
-                                {task.type === 'ADMIN' && <><Calendar className="w-3 h-3" /> {task.adminDetails ? new Date(task.adminDetails.dueDate).toLocaleDateString() : ''}</>}
+                                {task.type === 'ADMIN' && (
+                                  <>
+                                    <Calendar className="w-3 h-3" />
+                                    <span suppressHydrationWarning>
+                                      {task.adminDetails ? new Date(task.adminDetails.dueDate).toLocaleDateString() : ''}
+                                    </span>
+                                  </>
+                                )}
                               </span>
                               {task.type === 'ADMIN' && task.adminDetails?.subtasks && task.adminDetails.subtasks.length > 0 && (
                                 <button

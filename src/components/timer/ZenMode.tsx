@@ -13,11 +13,13 @@ import { completeDeepWorkTask } from '@/lib/features/tasks/tasksSlice';
 import { awardPoints } from '@/lib/features/vault/vaultSlice';
 import { calculateDeepWorkPoints } from '@/lib/gamification/engine';
 import { Minimize2, Pause, Play, Check } from 'lucide-react';
+import { useMounted } from '@/lib/useMounted';
 
 export default function ZenMode() {
   const dispatch = useAppDispatch();
   const timer = useAppSelector((state) => state.timer);
   const tasks = useAppSelector((state) => state.tasks.items);
+  const isMounted = useMounted();
 
   // Close Zen Mode on ESC key
   useEffect(() => {
@@ -30,7 +32,7 @@ export default function ZenMode() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [timer.isZenMode, dispatch]);
 
-  if (!timer.isZenMode) return null;
+  if (!isMounted || !timer.isZenMode) return null;
 
   const targetSeconds = timer.targetDurationMinutes * 60;
   const isOvertime = timer.elapsedSeconds > targetSeconds;

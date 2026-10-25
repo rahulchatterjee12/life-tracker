@@ -12,6 +12,7 @@ import {
 import { completeDeepWorkTask } from '@/lib/features/tasks/tasksSlice';
 import { awardPoints } from '@/lib/features/vault/vaultSlice';
 import { calculateDeepWorkPoints } from '@/lib/gamification/engine';
+import { useMounted } from '@/lib/useMounted';
 import {
   Play,
   Pause,
@@ -25,11 +26,18 @@ export default function HybridTimerWidget() {
   const dispatch = useAppDispatch();
   const timer = useAppSelector((state) => state.timer);
   const tasks = useAppSelector((state) => state.tasks.items);
+  const isMounted = useMounted();
 
   const [mode, setMode] = useState<'LIVE' | 'MANUAL'>('LIVE');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [targetDuration, setTargetDuration] = useState<number>(45);
   const [manualDuration, setManualDuration] = useState<number>(30);
+
+  // Hydration-safe derived timer states
+  const isRunning = isMounted ? timer.isRunning : false;
+  const isPaused = isMounted ? timer.isPaused : false;
+  const displaySeconds = isMounted ? timer.elapsedSeconds : 0;
+  const activeTaskId = isMounted ? timer.taskId : null;
 
   const deepWorkTasks = tasks.filter((t) => t.type === 'DEEP_WORK' && !t.completed);
 
@@ -40,7 +48,7 @@ export default function HybridTimerWidget() {
   };
 
   const currentTask = tasks.find(
-    (t) => String(t._id) === (timer.taskId || selectedTaskId || (deepWorkTasks[0]?._id ? String(deepWorkTasks[0]._id) : ''))
+    (t) => String(t._id) === (activeTaskId || selectedTaskId || (deepWorkTasks[0]?._id ? String(deepWorkTasks[0]._id) : ''))
   );
 
   const handleStartLive = () => {
@@ -198,17 +206,17 @@ export default function HybridTimerWidget() {
   };
 
   return (
-    <section className="p-5 rounded-2xl bg-surface border border-border space-y-4 shadow-sm">
+    <section className="p-5 rounded-2xl bg-surface border border-border space-y-4 shadow-sm" suppressHydrationWarning>
       {/* Header Bar */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span
             className={`h-2.5 w-2.5 rounded-full ${
-              timer.isRunning ? 'bg-ok animate-pulse' : 'bg-txt-3'
+              isRunning ? 'bg-ok animate-pulse' : 'bg-txt-3'
             }`}
           />
           <span className="text-xs font-medium uppercase tracking-wider text-txt-2">
-            {timer.isRunning ? 'Focus Active' : 'Focus Timer'}
+            {isRunning ? 'Focus Active' : 'Focus Timer'}
           </span>
         </div>
 
@@ -244,8 +252,8 @@ export default function HybridTimerWidget() {
           {/* Task Select & Target */}
           <div className="space-y-2 flex-1 max-w-sm">
             <select
-              disabled={timer.isRunning || timer.isPaused}
-              value={timer.taskId || selectedTaskId}
+              disabled={isRunning || isPaused}
+              value={activeTaskId || selectedTaskId}
               onChange={(e) => setSelectedTaskId(e.target.value)}
               className="w-full text-sm font-medium bg-bg text-txt border border-border rounded-xl px-3 py-2 cursor-pointer disabled:opacity-60 focus:outline-hidden focus:border-accent"
             >
@@ -265,10 +273,10 @@ export default function HybridTimerWidget() {
               {[25, 45, 60, 90].map((mins) => (
                 <button
                   key={mins}
-                  disabled={timer.isRunning || timer.isPaused}
+                  disabled={isRunning || isPaused}
                   onClick={() => setTargetDuration(mins)}
                   className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
-                    (timer.isRunning || timer.isPaused
+                    (isRunning || isPaused
                       ? timer.targetDurationMinutes === mins
                       : targetDuration === mins)
                       ? 'bg-accent/10 text-accent font-semibold'
@@ -283,12 +291,15 @@ export default function HybridTimerWidget() {
 
           {/* Time & Controls */}
           <div className="flex items-center gap-4 justify-between sm:justify-end">
-            <div className="font-mono text-3xl sm:text-4xl font-light text-txt tabular-nums">
-              {formatTime(timer.elapsedSeconds)}
+            <div
+              className="font-mono text-3xl sm:text-4xl font-light text-txt tabular-nums"
+              suppressHydrationWarning
+            >
+              {formatTime(displaySeconds)}
             </div>
 
             <div className="flex items-center gap-2">
-              {!timer.isRunning && !timer.isPaused && (
+              {!isRunning && !isPaused && (
                 <button
                   onClick={handleStartLive}
                   disabled={!currentTask && deepWorkTasks.length === 0}
@@ -299,7 +310,7 @@ export default function HybridTimerWidget() {
                 </button>
               )}
 
-              {timer.isRunning && (
+              {isRunning && (
                 <button
                   onClick={() => dispatch(pauseTimer())}
                   className="p-2.5 rounded-xl bg-surface-2 hover:bg-border-light text-txt transition cursor-pointer"
@@ -309,7 +320,7 @@ export default function HybridTimerWidget() {
                 </button>
               )}
 
-              {timer.isPaused && (
+              {isPaused && (
                 <button
                   onClick={() => dispatch(resumeTimer())}
                   className="p-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white transition cursor-pointer"
@@ -319,7 +330,7 @@ export default function HybridTimerWidget() {
                 </button>
               )}
 
-              {(timer.isRunning || timer.isPaused) && (
+              {(isRunning || isPaused) && (
                 <button
                   onClick={handleFinishLive}
                   className="p-2.5 rounded-xl bg-ok/10 hover:bg-ok/20 text-ok transition cursor-pointer"
@@ -329,7 +340,7 @@ export default function HybridTimerWidget() {
                 </button>
               )}
 
-              {timer.taskId && (
+              {activeTaskId && (
                 <button
                   onClick={() => dispatch(toggleZenMode(true))}
                   className="p-2.5 rounded-xl text-txt-2 hover:text-txt hover:bg-surface-2 transition cursor-pointer"
