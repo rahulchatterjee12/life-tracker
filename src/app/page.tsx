@@ -18,6 +18,7 @@ import HabitStackModal from '@/components/tasks/HabitStackModal';
 import NewTaskModal from '@/components/tasks/NewTaskModal';
 import RetrospectiveModal from '@/components/retrospective/RetrospectiveModal';
 import AuthModal from '@/components/auth/AuthModal';
+import HabitMatrixView from '@/components/analytics/HabitMatrixView';
 import { useState } from 'react';
 import {
   Flame,
@@ -41,9 +42,10 @@ import {
   X,
   LogIn,
   LogOut,
+  Grid3X3,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'vault';
+type View = 'dashboard' | 'matrix' | 'vault';
 
 export default function Home() {
   const { theme, toggle } = useTheme();
@@ -93,6 +95,7 @@ export default function Home() {
 
   const sidebarNav = [
     { id: 'dashboard' as View, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'matrix' as View, label: 'Habit Matrix', icon: Grid3X3 },
     { id: 'vault' as View, label: 'The Vault', icon: Wallet },
   ];
 
@@ -297,13 +300,22 @@ export default function Home() {
                     {pendingCount} pending · {completedCount} completed today
                   </p>
                 </div>
-                <button
-                  onClick={() => setIsNewTaskModalOpen(true)}
-                  className="hidden lg:flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-medium transition cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>New Task</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setView('matrix')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface border border-border-light hover:bg-surface-2 text-txt text-xs font-medium transition cursor-pointer"
+                  >
+                    <Grid3X3 className="w-3.5 h-3.5 text-accent" />
+                    <span className="hidden sm:inline">Habit Matrix</span>
+                  </button>
+                  <button
+                    onClick={() => setIsNewTaskModalOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs sm:text-sm font-medium transition cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>New Task</span>
+                  </button>
+                </div>
               </div>
 
               {/* Summary Cards */}
@@ -508,6 +520,8 @@ export default function Home() {
                 </div>
               </section>
             </>
+          ) : view === 'matrix' ? (
+            <HabitMatrixView />
           ) : (
             /* === VAULT VIEW === */
             <>

@@ -24,6 +24,8 @@ export interface TasksState {
   error: string | null;
 }
 
+const makeDates = (days: number[]) => days.map((d) => `2026-03-${String(d).padStart(2, '0')}`);
+
 const mockInitialTasks: ITask[] = [
   {
     _id: 'deep-1' as unknown as import('mongoose').Types.ObjectId,
@@ -46,11 +48,112 @@ const mockInitialTasks: ITask[] = [
     createdAt: new Date(),
     updatedAt: new Date(),
   },
+  // Real habits extracted from user's habit tracker spreadsheet
   {
-    _id: 'habit-1' as unknown as import('mongoose').Types.ObjectId,
+    _id: 'habit-water' as unknown as import('mongoose').Types.ObjectId,
     userId: 'user-default',
-    title: 'Morning Mindfulness & Meditation',
-    description: '10 minutes box breathing before beginning deep work',
+    title: 'Drink 3L Water',
+    description: 'Hydration requirement (3 liters daily)',
+    type: 'HABIT',
+    importance: 4,
+    isFrog: false,
+    completed: true,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 14,
+      bestStreak: 26,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-dsa' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'DSA',
+    description: 'Solve 2 problems on LeetCode / Algo',
+    type: 'HABIT',
+    importance: 5,
+    isFrog: false,
+    completed: true,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 10,
+      bestStreak: 25,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-wake' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Wake Up On Time',
+    description: 'Out of bed before 6:30 AM',
+    type: 'HABIT',
+    importance: 4,
+    isFrog: false,
+    completed: true,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 8,
+      bestStreak: 24,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-expenses' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Track Expenses',
+    description: 'Audit and log daily spending',
+    type: 'HABIT',
+    importance: 3,
+    isFrog: false,
+    completed: true,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 12,
+      bestStreak: 23,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-typing' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Typing',
+    description: '15 mins speed drill (Monkeytype)',
+    type: 'HABIT',
+    importance: 2,
+    isFrog: false,
+    completed: false,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 5,
+      bestStreak: 20,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 4, 5, 7, 8, 9, 10, 11, 12, 14, 15, 17, 18, 19, 20, 22, 24, 25, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-chess' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Chess',
+    description: '3 tactical puzzles & 1 rapid match',
     type: 'HABIT',
     importance: 3,
     isFrog: false,
@@ -58,9 +161,130 @@ const mockInitialTasks: ITask[] = [
     pointsAwarded: 0,
     habitDetails: {
       frequency: 'daily' as HabitFrequency,
-      streakCount: 7,
-      bestStreak: 14,
-      nextTaskId: 'deep-1', // Habit stacking anchor
+      streakCount: 4,
+      bestStreak: 18,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 3, 5, 6, 8, 9, 11, 12, 13, 15, 16, 18, 19, 21, 22, 24, 25]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-food' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: "Don't Eat Bad Food",
+    description: 'No junk food or excess sugar',
+    type: 'HABIT',
+    importance: 4,
+    isFrog: false,
+    completed: true,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 3,
+      bestStreak: 19,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 18, 19, 20, 22, 24, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-workout' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Workout',
+    description: 'Weight training / cardio gym session',
+    type: 'HABIT',
+    importance: 4,
+    isFrog: false,
+    completed: false,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 2,
+      bestStreak: 9,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 3, 5, 8, 10, 12, 15, 17, 22]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-project' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Project Work',
+    description: 'Side project execution block',
+    type: 'HABIT',
+    importance: 4,
+    isFrog: false,
+    completed: false,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 1,
+      bestStreak: 9,
+      monthlyGoal: 31,
+      completedDates: makeDates([2, 4, 6, 9, 11, 13, 16, 18, 23]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-dev' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Development',
+    description: 'Build & push GitHub commits',
+    type: 'HABIT',
+    importance: 4,
+    isFrog: false,
+    completed: false,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'weekdays' as HabitFrequency,
+      streakCount: 2,
+      bestStreak: 8,
+      monthlyGoal: 25,
+      completedDates: makeDates([2, 3, 5, 9, 10, 12, 16, 19]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-clean' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Clean Room',
+    description: 'Keep workspace & desk organized',
+    type: 'HABIT',
+    importance: 2,
+    isFrog: false,
+    completed: false,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 2,
+      bestStreak: 12,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 4, 6, 8, 11, 13, 15, 18, 20, 22, 25, 26]),
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    _id: 'habit-meditation' as unknown as import('mongoose').Types.ObjectId,
+    userId: 'user-default',
+    title: 'Meditation',
+    description: '10 min mindfulness breathing',
+    type: 'HABIT',
+    importance: 3,
+    isFrog: false,
+    completed: false,
+    pointsAwarded: 0,
+    habitDetails: {
+      frequency: 'daily' as HabitFrequency,
+      streakCount: 1,
+      bestStreak: 3,
+      monthlyGoal: 31,
+      completedDates: makeDates([1, 2, 4]),
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -345,6 +569,31 @@ export const tasksSlice = createSlice({
         state.dailyFrogId = null;
       }
     },
+
+    toggleHabitDay: (
+      state,
+      action: PayloadAction<{ taskId: string; day: number; monthYear?: string }>
+    ) => {
+      const { taskId, day, monthYear = '2026-03' } = action.payload;
+      const habit = state.items.find((t) => String(t._id) === taskId);
+      if (!habit || habit.type !== 'HABIT' || !habit.habitDetails) return;
+
+      const dateStr = `${monthYear}-${String(day).padStart(2, '0')}`;
+      const dates = habit.habitDetails.completedDates || [];
+      const exists = dates.includes(dateStr);
+
+      if (exists) {
+        habit.habitDetails.completedDates = dates.filter((d) => d !== dateStr);
+        habit.habitDetails.streakCount = Math.max(0, habit.habitDetails.streakCount - 1);
+      } else {
+        habit.habitDetails.completedDates = [...dates, dateStr];
+        habit.habitDetails.streakCount += 1;
+        habit.habitDetails.bestStreak = Math.max(
+          habit.habitDetails.bestStreak,
+          habit.habitDetails.streakCount
+        );
+      }
+    },
   },
 });
 
@@ -356,6 +605,7 @@ export const {
   addHabitTask,
   addAdminTask,
   toggleHabitCompletion,
+  toggleHabitDay,
   closeHabitStackModal,
   completeDeepWorkTask,
   toggleAdminSubtask,

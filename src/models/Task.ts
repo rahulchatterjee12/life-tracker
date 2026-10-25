@@ -41,6 +41,8 @@ const HabitDetailsSchema = new Schema<IHabitDetails>(
     streakCount: { type: Number, default: 0 },
     bestStreak: { type: Number, default: 0 },
     lastCompletedDate: { type: String }, // YYYY-MM-DD
+    completedDates: { type: [String], default: [] },
+    monthlyGoal: { type: Number, default: 31 },
     nextTaskId: { type: Schema.Types.ObjectId, ref: 'Task' }, // Habit Stacking pointer
   },
   { _id: false }

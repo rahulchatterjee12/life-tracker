@@ -82,6 +82,8 @@ export interface IHabitDetails {
   streakCount: number;
   bestStreak: number;
   lastCompletedDate?: string; // YYYY-MM-DD
+  completedDates?: string[]; // YYYY-MM-DD strings for matrix view
+  monthlyGoal?: number; // e.g. 31 or 25
   nextTaskId?: Types.ObjectId | string; // Habit Stacking link
 }
 
