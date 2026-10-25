@@ -577,6 +577,84 @@ export const tasksSlice = createSlice({
       }
     },
 
+    updateTask: (
+      state,
+      action: PayloadAction<{
+        id: string;
+        title: string;
+        description?: string;
+        importance?: TaskImportance;
+        isFrog?: boolean;
+        type?: TaskType;
+        habitDetails?: {
+          frequency?: HabitFrequency;
+          monthlyGoal?: number;
+          streakCount?: number;
+          bestStreak?: number;
+          nextTaskId?: string;
+        };
+        deepWorkDetails?: {
+          targetDurationMinutes?: number;
+        };
+        adminDetails?: {
+          dueDate?: string;
+          isRecurring?: boolean;
+          recurringCycle?: AdminRecurringCycle;
+        };
+      }>
+    ) => {
+      const task = state.items.find((t) => String(t._id) === action.payload.id);
+      if (!task) return;
+
+      task.title = action.payload.title;
+      task.description = action.payload.description;
+      if (action.payload.importance !== undefined) {
+        task.importance = action.payload.importance;
+      }
+
+      if (action.payload.isFrog !== undefined) {
+        if (action.payload.isFrog) {
+          state.items.forEach((t) => (t.isFrog = false));
+          state.dailyFrogId = String(task._id);
+        } else if (task.isFrog) {
+          state.dailyFrogId = null;
+        }
+        task.isFrog = action.payload.isFrog;
+      }
+
+      if (action.payload.habitDetails && task.habitDetails) {
+        if (action.payload.habitDetails.frequency) {
+          task.habitDetails.frequency = action.payload.habitDetails.frequency;
+        }
+        if (action.payload.habitDetails.monthlyGoal !== undefined) {
+          task.habitDetails.monthlyGoal = action.payload.habitDetails.monthlyGoal;
+        }
+        if (action.payload.habitDetails.nextTaskId !== undefined) {
+          task.habitDetails.nextTaskId = action.payload.habitDetails.nextTaskId;
+        }
+      }
+
+      if (action.payload.deepWorkDetails && task.deepWorkDetails) {
+        if (action.payload.deepWorkDetails.targetDurationMinutes) {
+          task.deepWorkDetails.targetDurationMinutes = action.payload.deepWorkDetails.targetDurationMinutes;
+        }
+      }
+
+      if (action.payload.adminDetails && task.adminDetails) {
+        if (action.payload.adminDetails.dueDate) {
+          task.adminDetails.dueDate = new Date(action.payload.adminDetails.dueDate);
+        }
+        if (action.payload.adminDetails.isRecurring !== undefined) {
+          task.adminDetails.isRecurring = action.payload.adminDetails.isRecurring;
+        }
+        if (action.payload.adminDetails.recurringCycle) {
+          task.adminDetails.recurringCycle = action.payload.adminDetails.recurringCycle;
+        }
+      }
+
+      task.updatedAt = new Date();
+    },
+
     toggleHabitDay: (
       state,
       action: PayloadAction<{ taskId: string; day: number; monthYear?: string }>
@@ -619,6 +697,7 @@ export const {
   toggleAdminTaskCompletion,
   setDailyFrog,
   deleteTask,
+  updateTask,
 } = tasksSlice.actions;
 
 export default tasksSlice.reducer;

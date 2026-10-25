@@ -81,3 +81,68 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    await connectToDatabase();
+    const body = await request.json();
+    const { id, ...updates } = body;
+    const user = await getTargetUser();
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Task id is required' },
+        { status: 400 }
+      );
+    }
+
+    if (updates.isFrog) {
+      await Task.updateMany({ userId: user._id, isFrog: true }, { isFrog: false });
+    }
+
+    const updatedTask = await Task.findOneAndUpdate(
+      { _id: id, userId: user._id },
+      { ...updates, updatedAt: new Date() },
+      { new: true }
+    );
+
+    return NextResponse.json({
+      success: true,
+      task: updatedTask,
+    });
+  } catch (error) {
+    console.error('Failed to update task:', error);
+    return NextResponse.json(
+      { success: false, error: (error as Error).message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    await connectToDatabase();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const user = await getTargetUser();
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Task id is required' },
+        { status: 400 }
+      );
+    }
+
+    await Task.findOneAndDelete({ _id: id, userId: user._id });
+
+    return NextResponse.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error('Failed to delete task:', error);
+    return NextResponse.json(
+      { success: false, error: (error as Error).message },
+      { status: 500 }
+    );
+  }
+}

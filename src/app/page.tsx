@@ -7,7 +7,6 @@ import {
   toggleHabitCompletion,
   toggleAdminSubtask,
   toggleAdminTaskCompletion,
-  deleteTask,
   setSelectedCategory,
 } from '@/lib/features/tasks/tasksSlice';
 import { startTimer } from '@/lib/features/timer/timerSlice';
@@ -15,7 +14,7 @@ import { purchaseStreakFreeze, redeemVaultReward } from '@/lib/features/vault/va
 import ZenMode from '@/components/timer/ZenMode';
 import HybridTimerWidget from '@/components/timer/HybridTimerWidget';
 import HabitStackModal from '@/components/tasks/HabitStackModal';
-import NewTaskModal from '@/components/tasks/NewTaskModal';
+import TaskManagerView from '@/components/tasks/TaskManagerView';
 import RetrospectiveModal from '@/components/retrospective/RetrospectiveModal';
 import AuthModal from '@/components/auth/AuthModal';
 import HabitMatrixView from '@/components/analytics/HabitMatrixView';
@@ -25,10 +24,8 @@ import {
   Calendar,
   Clock,
   Sparkles,
-  Plus,
   ChevronDown,
   ChevronUp,
-  Trash2,
   Bot,
   Sun,
   Moon,
@@ -43,9 +40,10 @@ import {
   LogIn,
   LogOut,
   Grid3X3,
+  ListTodo,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'vault';
+type View = 'dashboard' | 'manage' | 'vault';
 
 export default function Home() {
   const { theme, toggle } = useTheme();
@@ -55,7 +53,6 @@ export default function Home() {
   const vault = useAppSelector((state) => state.vault);
 
   const [view, setView] = useState<View>('dashboard');
-  const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
   const [isRetroModalOpen, setIsRetroModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
@@ -95,6 +92,7 @@ export default function Home() {
 
   const sidebarNav = [
     { id: 'dashboard' as View, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'manage' as View, label: 'Manage Tasks', icon: ListTodo },
     { id: 'vault' as View, label: 'The Vault', icon: Wallet },
   ];
 
@@ -103,7 +101,6 @@ export default function Home() {
       {/* Overlays */}
       <ZenMode />
       <HabitStackModal />
-      <NewTaskModal isOpen={isNewTaskModalOpen} onClose={() => setIsNewTaskModalOpen(false)} />
       <RetrospectiveModal isOpen={isRetroModalOpen} onClose={() => setIsRetroModalOpen(false)} />
       <AuthModal
         isOpen={isAuthModalOpen}
@@ -250,10 +247,13 @@ export default function Home() {
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           <button
-            onClick={() => setIsNewTaskModalOpen(true)}
-            className="p-1.5 rounded-lg bg-accent text-white cursor-pointer"
+            onClick={() => setView('manage')}
+            className={`p-1.5 rounded-lg cursor-pointer transition ${
+              view === 'manage' ? 'bg-accent text-white' : 'bg-surface-2 text-txt hover:bg-border-light'
+            }`}
+            title="Manage Tasks & Habits"
           >
-            <Plus className="w-4 h-4" />
+            <ListTodo className="w-4 h-4" />
           </button>
         </div>
       </header>
@@ -311,11 +311,12 @@ export default function Home() {
                     <span className="hidden sm:inline">Habit Matrix</span>
                   </button>
                   <button
-                    onClick={() => setIsNewTaskModalOpen(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs sm:text-sm font-medium transition cursor-pointer"
+                    onClick={() => setView('manage')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-2 hover:bg-surface border border-border-light text-txt text-xs font-medium transition cursor-pointer"
+                    title="Open task and habit manager"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>New Task</span>
+                    <ListTodo className="w-3.5 h-3.5 text-accent" />
+                    <span>Manage Tasks</span>
                   </button>
                 </div>
               </div>
@@ -410,12 +411,12 @@ export default function Home() {
                 <div className="rounded-2xl border border-border-light bg-surface overflow-hidden divide-y divide-border-light">
                   {filteredTasks.length === 0 ? (
                     <div className="p-12 text-center">
-                      <p className="text-sm text-txt-3">No tasks yet</p>
+                      <p className="text-sm text-txt-3">No tasks found for this view</p>
                       <button
-                        onClick={() => setIsNewTaskModalOpen(true)}
-                        className="mt-3 text-sm text-accent hover:underline cursor-pointer"
+                        onClick={() => setView('manage')}
+                        className="mt-3 text-xs text-accent hover:underline cursor-pointer"
                       >
-                        Create your first task
+                        Go to Manage Tasks &amp; Habits →
                       </button>
                     </div>
                   ) : (
@@ -490,14 +491,6 @@ export default function Home() {
                               <span className="text-[11px] text-txt-3">★ {task.importance}</span>
                             </div>
                           </div>
-
-                          {/* Delete */}
-                          <button
-                            onClick={() => dispatch(deleteTask(String(task._id)))}
-                            className="shrink-0 opacity-0 group-hover:opacity-100 text-txt-3 hover:text-bad p-1 transition cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
 
                         {/* Subtasks */}
@@ -527,6 +520,9 @@ export default function Home() {
                 <HabitMatrixView />
               </section>
             </>
+          ) : view === 'manage' ? (
+            /* === MANAGE TASKS & HABITS VIEW === */
+            <TaskManagerView />
           ) : (
             /* === VAULT VIEW === */
             <>
