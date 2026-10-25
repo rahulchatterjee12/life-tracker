@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAppDispatch, useAppSelector } from '@/lib/hooks';
-import { toggleHabitDay } from '@/lib/features/tasks/tasksSlice';
+import { useAppSelector } from '@/lib/hooks';
 import { useMounted } from '@/lib/useMounted';
 import {
   Flame,
@@ -11,10 +10,16 @@ import {
   Award,
   Sparkles,
   Calendar as CalendarIcon,
+  Lock,
+  CheckCircle2,
 } from 'lucide-react';
 
 const DAYS_IN_MONTH = 31;
 const DAYS_ARRAY = Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1);
+
+// Active tracking day in March 2026 reflecting the dashboard tasks
+const ACTIVE_DAY = 27;
+const MONTH_YEAR = '2026-03';
 
 // Week groupings matching calendar (March 2026 starts on Sunday)
 const WEEKS = [
@@ -28,27 +33,32 @@ const WEEKS = [
 const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function HabitMatrixView() {
-  const dispatch = useAppDispatch();
   const tasks = useAppSelector((state) => state.tasks.items);
   const isMounted = useMounted();
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
 
-  // Filter only habits
+  // Filter only habits (matching the daily habits from user's spreadsheet)
   const habits = tasks.filter((t) => t.type === 'HABIT' && t.habitDetails);
 
-  const monthYear = '2026-03';
-
   // Helper: check if habit is completed on a specific day
-  const isHabitCompletedOnDay = (habitId: string, day: number) => {
-    const habit = habits.find((h) => String(h._id) === habitId);
-    if (!habit?.habitDetails?.completedDates) return false;
-    const dateStr = `${monthYear}-${String(day).padStart(2, '0')}`;
-    return habit.habitDetails.completedDates.includes(dateStr);
+  // For ACTIVE_DAY (day 27), it reads directly from habit.completed (dashboard pending/completed state)!
+  // For other days, it reads from habit.habitDetails.completedDates.
+  const isHabitCompletedOnDay = (habit: (typeof habits)[0], day: number) => {
+    if (day === ACTIVE_DAY) {
+      return Boolean(habit.completed);
+    }
+    const dateStr = `${MONTH_YEAR}-${String(day).padStart(2, '0')}`;
+    return habit.habitDetails?.completedDates?.includes(dateStr) ?? false;
+  };
+
+  // Completed count for a habit across all 31 days
+  const getHabitCompletedCount = (habit: (typeof habits)[0]) => {
+    return DAYS_ARRAY.filter((day) => isHabitCompletedOnDay(habit, day)).length;
   };
 
   // Calculate daily stats across all habits for each day 1..31
   const dailyStats = DAYS_ARRAY.map((day) => {
-    const completedCount = habits.filter((h) => isHabitCompletedOnDay(String(h._id), day)).length;
+    const completedCount = habits.filter((h) => isHabitCompletedOnDay(h, day)).length;
     const totalHabits = habits.length;
     const percentage = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
     return {
@@ -61,13 +71,17 @@ export default function HabitMatrixView() {
 
   // Calculate overall monthly metrics
   const totalPossibleChecks = habits.reduce((acc, h) => acc + (h.habitDetails?.monthlyGoal || 31), 0);
-  const totalCompletedChecks = habits.reduce((acc, h) => acc + (h.habitDetails?.completedDates?.length || 0), 0);
+  const totalCompletedChecks = habits.reduce((acc, h) => acc + getHabitCompletedCount(h), 0);
   const monthlyCompletionRate = totalPossibleChecks > 0 ? Math.round((totalCompletedChecks / totalPossibleChecks) * 100) : 0;
 
-  // Best habit by streak and rate
+  // Today's dashboard completion stats
+  const todayCompletedCount = habits.filter((h) => h.completed).length;
+  const todayPendingCount = habits.filter((h) => !h.completed).length;
+
+  // Best habit by completion rate
   const sortedByRate = [...habits].sort((a, b) => {
-    const rateA = (a.habitDetails?.completedDates?.length || 0) / (a.habitDetails?.monthlyGoal || 31);
-    const rateB = (b.habitDetails?.completedDates?.length || 0) / (b.habitDetails?.monthlyGoal || 31);
+    const rateA = getHabitCompletedCount(a) / (a.habitDetails?.monthlyGoal || 31);
+    const rateB = getHabitCompletedCount(b) / (b.habitDetails?.monthlyGoal || 31);
     return rateB - rateA;
   });
 
@@ -80,7 +94,7 @@ export default function HabitMatrixView() {
     let completedInWeek = 0;
     w.days.forEach((day) => {
       habits.forEach((h) => {
-        if (isHabitCompletedOnDay(String(h._id), day)) {
+        if (isHabitCompletedOnDay(h, day)) {
           completedInWeek += 1;
         }
       });
@@ -111,7 +125,6 @@ export default function HabitMatrixView() {
 
   const pathD = points.reduce((acc, p, idx) => {
     if (idx === 0) return `M ${p.x} ${p.y}`;
-    // Bezier smoothing
     const prev = points[idx - 1];
     const cx = (prev.x + p.x) / 2;
     return `${acc} C ${cx} ${prev.y}, ${cx} ${p.y}, ${p.x} ${p.y}`;
@@ -129,22 +142,36 @@ export default function HabitMatrixView() {
       {/* === TOP TITLE & CONTROLS === */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-semibold text-txt tracking-tight">
-              Habit Tracker &amp; Analytics
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg sm:text-xl font-semibold text-txt tracking-tight">
+              Habit Consistency Matrix &amp; Visual Analytics
             </h2>
             <span className="flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
               <CalendarIcon className="w-3 h-3" />
               March 2026
             </span>
+            <span className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-surface-2 text-txt-2 border border-border-light font-medium">
+              <Lock className="w-3 h-3 text-txt-3" />
+              Read-only · Synced from Dashboard
+            </span>
           </div>
           <p className="text-xs text-txt-2 mt-1">
-            Visual consistency matrix, daily completion curves, and streak momentum.
+            Real-time visual curves, monthly progress ring, and weekly momentum driven by your dashboard tasks.
           </p>
         </div>
 
         {/* Quick KPI badges */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border-light text-xs">
+            <CheckCircle2 className="w-3.5 h-3.5 text-ok" />
+            <span className="text-txt-2">Today:</span>
+            <span className="font-semibold text-txt">
+              {todayCompletedCount}/{habits.length} Done
+            </span>
+            {todayPendingCount > 0 && (
+              <span className="text-[10px] text-txt-3">({todayPendingCount} pending)</span>
+            )}
+          </div>
           {topHabit && (
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border-light text-xs">
               <Award className="w-3.5 h-3.5 text-accent" />
@@ -167,7 +194,7 @@ export default function HabitMatrixView() {
 
       {/* === ROW 1: CHARTS & STATS === */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Daily Completion Trend Line Chart (7 cols) */}
+        {/* Daily Completion Trend Line Chart (8 cols) */}
         <div className="lg:col-span-8 p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -176,13 +203,17 @@ export default function HabitMatrixView() {
               </span>
               <div>
                 <h3 className="text-sm font-semibold text-txt">Daily Consistency Trend</h3>
-                <p className="text-[11px] text-txt-3">Daily completion percentage across March</p>
+                <p className="text-[11px] text-txt-3">Daily completion percentage across 31 days (updates with dashboard)</p>
               </div>
             </div>
 
-            {hoveredDay && (
+            {hoveredDay ? (
               <div className="text-xs font-mono px-2 py-1 rounded-md bg-surface-2 text-txt font-medium">
-                Day {hoveredDay}: {dailyStats[hoveredDay - 1]?.completed}/{dailyStats[hoveredDay - 1]?.total} ({dailyStats[hoveredDay - 1]?.percentage}%)
+                Day {hoveredDay}{hoveredDay === ACTIVE_DAY ? ' (Today)' : ''}: {dailyStats[hoveredDay - 1]?.completed}/{dailyStats[hoveredDay - 1]?.total} ({dailyStats[hoveredDay - 1]?.percentage}%)
+              </div>
+            ) : (
+              <div className="text-[11px] text-txt-3 font-mono">
+                Day {ACTIVE_DAY} (Today): {dailyStats[ACTIVE_DAY - 1]?.percentage}%
               </div>
             )}
           </div>
@@ -240,6 +271,7 @@ export default function HabitMatrixView() {
               {/* Data Points */}
               {points.map((p) => {
                 const isHovered = hoveredDay === p.day;
+                const isTodayPoint = p.day === ACTIVE_DAY;
                 return (
                   <g
                     key={p.day}
@@ -247,11 +279,25 @@ export default function HabitMatrixView() {
                     onMouseEnter={() => setHoveredDay(p.day)}
                     onMouseLeave={() => setHoveredDay(null)}
                   >
+                    {isTodayPoint && (
+                      <circle
+                        cx={p.x}
+                        cy={p.y}
+                        r={7}
+                        className="fill-accent/20 animate-ping"
+                      />
+                    )}
                     <circle
                       cx={p.x}
                       cy={p.y}
-                      r={isHovered ? 5 : 2.5}
-                      className={isHovered ? 'fill-accent stroke-bg stroke-2 transition-all' : 'fill-accent'}
+                      r={isHovered ? 5 : isTodayPoint ? 4 : 2.5}
+                      className={
+                        isHovered
+                          ? 'fill-accent stroke-bg stroke-2 transition-all'
+                          : isTodayPoint
+                          ? 'fill-ok stroke-bg stroke-1'
+                          : 'fill-accent'
+                      }
                     />
                     {/* Transparent touch/hover hit zone */}
                     <circle cx={p.x} cy={p.y} r={12} fill="transparent" />
@@ -266,6 +312,7 @@ export default function HabitMatrixView() {
               <span>Day 8</span>
               <span>Day 15</span>
               <span>Day 22</span>
+              <span className="text-accent font-semibold">Day 27 (Today)</span>
               <span>Day 31</span>
             </div>
           </div>
@@ -350,9 +397,9 @@ export default function HabitMatrixView() {
                     {w.completed}/{w.total}
                   </span>
                 </div>
-                <div className="mt-1.5 h-1.5 rounded-full bg-surface-2 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-surface-2 mt-1.5 overflow-hidden">
                   <div
-                    className="h-full bg-accent rounded-full transition-all duration-500"
+                    className="h-full rounded-full bg-accent transition-all duration-500"
                     style={{ width: `${w.percentage}%` }}
                   />
                 </div>
@@ -362,57 +409,55 @@ export default function HabitMatrixView() {
         </div>
       </div>
 
-      {/* === ROW 3: TOP 10 DAILY HABITS LEADERBOARD === */}
-      <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3">
+      {/* === ROW 3: TOP 10 HABITS LEADERBOARD === */}
+      <div className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="p-1 rounded-lg bg-warn/10 text-warn">
-              <Award className="w-4 h-4" />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-txt">Top 10 Habits &amp; Streaks</h3>
-              <p className="text-[11px] text-txt-3">Ranked by monthly execution consistency</p>
-            </div>
-          </div>
-          <span className="text-xs text-txt-3">{habits.length} habits tracked</span>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-txt-2">
+            Top Consistency Leaderboard
+          </h3>
+          <span className="text-xs text-txt-3">Ranked by monthly execution</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-          {sortedByRate.slice(0, 9).map((habit, rank) => {
-            const completedDays = habit.habitDetails?.completedDates?.length || 0;
-            const goal = habit.habitDetails?.monthlyGoal || 31;
-            const rate = Math.round((completedDays / goal) * 100);
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {sortedByRate.slice(0, 6).map((habit, idx) => {
+            const completedCount = getHabitCompletedCount(habit);
+            const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
+            const rate = Math.round((completedCount / monthlyGoal) * 100);
             const streak = habit.habitDetails?.streakCount || 0;
 
             return (
               <div
                 key={String(habit._id)}
-                className="p-3 rounded-xl bg-bg border border-border-light flex items-center justify-between gap-3"
+                className="p-3.5 rounded-xl bg-surface border border-border-light flex items-center justify-between gap-3"
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-5 h-5 rounded-full bg-surface-2 text-txt-2 flex items-center justify-center text-[10px] font-bold shrink-0 font-mono">
-                    {rank + 1}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-5 h-5 rounded-full bg-surface-2 flex items-center justify-center text-xs font-bold text-txt-3 shrink-0">
+                    {idx + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-txt truncate">{habit.title}</p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-txt-3 mt-0.5">
-                      <span>{completedDays}/{goal} days</span>
-                      {streak > 0 && (
-                        <span className="flex items-center gap-0.5 text-warn font-medium">
-                          <Flame className="w-3 h-3" />
-                          {streak}d
+                    <p className="text-xs font-medium text-txt truncate">{habit.title}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] text-txt-3 font-mono">
+                        {completedCount}/{monthlyGoal} ({rate}%)
+                      </span>
+                      {habit.completed ? (
+                        <span className="text-[10px] text-ok font-medium flex items-center gap-0.5">
+                          <Check className="w-2.5 h-2.5" /> Done
                         </span>
+                      ) : (
+                        <span className="text-[10px] text-txt-3">Pending</span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
-                  <span className={`text-xs font-bold font-mono ${
-                    rate >= 75 ? 'text-ok' : rate >= 50 ? 'text-accent' : 'text-txt-2'
-                  }`}>
-                    {rate}%
-                  </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {streak > 0 && (
+                    <span className="flex items-center gap-0.5 text-xs text-warn font-semibold font-mono px-2 py-0.5 rounded-md bg-warn/10">
+                      <Flame className="w-3 h-3" />
+                      {streak}d
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -420,35 +465,47 @@ export default function HabitMatrixView() {
         </div>
       </div>
 
-      {/* === ROW 4: THE INTERACTIVE 31-DAY HABIT MATRIX === */}
-      <div className="p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-4">
+      {/* === ROW 4: 31-DAY READ-ONLY HABIT MATRIX === */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-txt">Daily Habit Matrix</h3>
-            <p className="text-[11px] text-txt-3">
-              Click any day cell to toggle completion. Real-time streak recalculation.
+            <h3 className="text-sm font-semibold text-txt">
+              31-Day Habit Tracking Matrix
+            </h3>
+            <p className="text-xs text-txt-3">
+              Read-only matrix synchronized with your dashboard pending and completed tasks.
             </p>
           </div>
+
           <div className="flex items-center gap-3 text-xs text-txt-3">
-            <span className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md bg-accent text-white flex items-center justify-center text-[9px] font-bold">✓</span>
-              Completed
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 rounded-md border border-border bg-bg" />
-              Pending
-            </span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-ok/20 border border-ok/40 flex items-center justify-center">
+                <Check className="w-2.5 h-2.5 text-ok" />
+              </div>
+              <span>Completed</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-surface-2 border border-dashed border-txt-3/50" />
+              <span>Pending Today</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-surface-2/40 border border-border-light" />
+              <span>Unmarked</span>
+            </div>
           </div>
         </div>
 
-        {/* Scrollable Matrix Grid Table */}
+        {/* Scrollable Matrix Table */}
         <div className="overflow-x-auto rounded-xl border border-border-light">
-          <table className="w-full border-collapse text-left">
+          <table className="w-full text-left border-collapse select-none">
             <thead>
-              {/* Week Super-Headers */}
-              <tr className="bg-surface-2/60 border-b border-border-light text-[10px] font-semibold uppercase tracking-wider text-txt-2">
+              {/* Week Column Spans */}
+              <tr className="bg-surface-2/60 border-b border-border-light text-[11px] text-txt-2">
                 <th className="sticky left-0 z-20 bg-surface-2 px-3 py-2 min-w-[170px]">
                   Daily Habits ({habits.length})
+                </th>
+                <th className="px-2 py-2 text-center border-r border-border-light min-w-[65px]">
+                  Today
                 </th>
                 <th className="px-2 py-2 text-center border-r border-border-light min-w-[50px]">
                   Goal
@@ -472,21 +529,31 @@ export default function HabitMatrixView() {
                 <th className="sticky left-0 z-20 bg-surface px-3 py-1 font-normal text-txt-2">
                   Habit Name
                 </th>
+                <th className="px-1 py-1 text-center border-r border-border-light text-txt-2">
+                  Status
+                </th>
                 <th className="px-1 py-1 text-center border-r border-border-light">
                   Days
                 </th>
                 {DAYS_ARRAY.map((day) => {
                   const dayOfWeek = DAY_NAMES[(day - 1) % 7];
                   const isWeekEnd = day % 7 === 0;
+                  const isToday = day === ACTIVE_DAY;
                   return (
                     <th
                       key={day}
                       className={`py-1 text-center font-normal min-w-[24px] ${
+                        isToday ? 'bg-accent/10 rounded-t-md' : ''
+                      } ${
                         isWeekEnd ? 'border-r border-border-light' : ''
                       }`}
                     >
-                      <div className="text-[9px] text-txt-3">{dayOfWeek}</div>
-                      <div className="text-[10px] font-semibold text-txt">{day}</div>
+                      <div className={`text-[9px] ${isToday ? 'font-bold text-accent' : 'text-txt-3'}`}>
+                        {isToday ? '★' : dayOfWeek}
+                      </div>
+                      <div className={`text-[10px] font-semibold ${isToday ? 'text-accent font-bold' : 'text-txt'}`}>
+                        {day}
+                      </div>
                     </th>
                   );
                 })}
@@ -497,10 +564,11 @@ export default function HabitMatrixView() {
             <tbody className="divide-y divide-border-light bg-bg text-xs">
               {habits.map((habit) => {
                 const habitId = String(habit._id);
-                const completedCount = habit.habitDetails?.completedDates?.length || 0;
+                const completedCount = getHabitCompletedCount(habit);
                 const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
                 const rate = Math.round((completedCount / monthlyGoal) * 100);
                 const streak = habit.habitDetails?.streakCount || 0;
+                const isDoneToday = Boolean(habit.completed);
 
                 return (
                   <tr
@@ -520,43 +588,55 @@ export default function HabitMatrixView() {
                       </div>
                     </td>
 
+                    {/* Today's Status Column */}
+                    <td className="px-2 py-2.5 text-center border-r border-border-light">
+                      {isDoneToday ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-ok/10 text-ok border border-ok/20">
+                          <Check className="w-2.5 h-2.5" /> Done
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-2 text-txt-3 border border-border-light">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+
                     {/* Goal Column */}
                     <td className="px-2 py-2.5 text-center font-mono text-[11px] text-txt-3 border-r border-border-light">
                       {monthlyGoal}
                     </td>
 
-                    {/* 31 Day Checkbox Cells */}
+                    {/* 31 Day Read-Only Matrix Cells */}
                     {DAYS_ARRAY.map((day) => {
-                      const isCompleted = isHabitCompletedOnDay(habitId, day);
+                      const isCompleted = isHabitCompletedOnDay(habit, day);
                       const isWeekEnd = day % 7 === 0;
+                      const isToday = day === ACTIVE_DAY;
 
                       return (
                         <td
                           key={day}
                           className={`p-0.5 text-center align-middle ${
+                            isToday ? 'bg-accent/5' : ''
+                          } ${
                             isWeekEnd ? 'border-r border-border-light' : ''
                           }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              dispatch(
-                                toggleHabitDay({
-                                  taskId: habitId,
-                                  day,
-                                  monthYear,
-                                })
-                              )
-                            }
-                            className={`w-5 h-5 rounded-md mx-auto flex items-center justify-center transition-all cursor-pointer ${
+                          <div
+                            className={`w-5 h-5 rounded-md mx-auto flex items-center justify-center transition-all select-none ${
                               isCompleted
-                                ? 'bg-accent text-white shadow-xs scale-95'
-                                : 'bg-surface-2/60 border border-border-light hover:border-accent/60 text-transparent'
+                                ? 'bg-ok/20 text-ok border border-ok/40'
+                                : isToday
+                                ? 'bg-surface-2 border border-dashed border-txt-3/50 text-transparent'
+                                : 'bg-surface-2/40 border border-border-light/60 text-transparent'
                             }`}
-                            title={`Toggle Day ${day} for ${habit.title}`}
+                            title={
+                              isToday
+                                ? `Day ${day} (Today): ${isCompleted ? 'Done on Dashboard' : 'Pending on Dashboard'}`
+                                : `Day ${day}: ${isCompleted ? 'Completed' : 'Unmarked'}`
+                            }
                           >
-                            <Check className="w-3 h-3 stroke-[2.5]" />
-                          </button>
+                            {isCompleted ? <Check className="w-3 h-3 stroke-[2.5]" /> : null}
+                          </div>
                         </td>
                       );
                     })}
@@ -590,4 +670,3 @@ export default function HabitMatrixView() {
     </div>
   );
 }
-

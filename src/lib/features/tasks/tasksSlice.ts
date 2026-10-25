@@ -64,7 +64,7 @@ const mockInitialTasks: ITask[] = [
       streakCount: 14,
       bestStreak: 26,
       monthlyGoal: 31,
-      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]),
+      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]),
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -84,7 +84,7 @@ const mockInitialTasks: ITask[] = [
       streakCount: 10,
       bestStreak: 25,
       monthlyGoal: 31,
-      completedDates: makeDates([1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]),
+      completedDates: makeDates([1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]),
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -104,7 +104,7 @@ const mockInitialTasks: ITask[] = [
       streakCount: 8,
       bestStreak: 24,
       monthlyGoal: 31,
-      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26]),
+      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 27]),
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -124,7 +124,7 @@ const mockInitialTasks: ITask[] = [
       streakCount: 12,
       bestStreak: 23,
       monthlyGoal: 31,
-      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26]),
+      completedDates: makeDates([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27]),
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -184,7 +184,7 @@ const mockInitialTasks: ITask[] = [
       streakCount: 3,
       bestStreak: 19,
       monthlyGoal: 31,
-      completedDates: makeDates([1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 18, 19, 20, 22, 24, 26]),
+      completedDates: makeDates([1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 18, 19, 20, 22, 24, 26, 27]),
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -472,13 +472,19 @@ export const tasksSlice = createSlice({
       const habit = state.items.find((t) => String(t._id) === action.payload);
       if (habit && habit.type === 'HABIT' && habit.habitDetails) {
         habit.completed = !habit.completed;
+        const activeDateStr = '2026-03-27';
+        const dates = habit.habitDetails.completedDates || [];
+
         if (habit.completed) {
           habit.completedAt = new Date();
           habit.habitDetails.streakCount += 1;
           if (habit.habitDetails.streakCount > habit.habitDetails.bestStreak) {
             habit.habitDetails.bestStreak = habit.habitDetails.streakCount;
           }
-          habit.habitDetails.lastCompletedDate = new Date().toISOString().split('T')[0];
+          habit.habitDetails.lastCompletedDate = activeDateStr;
+          if (!dates.includes(activeDateStr)) {
+            habit.habitDetails.completedDates = [...dates, activeDateStr];
+          }
 
           // Trigger Habit Stacking modal if a nextTaskId is chained!
           if (habit.habitDetails.nextTaskId) {
@@ -495,6 +501,7 @@ export const tasksSlice = createSlice({
         } else {
           habit.completedAt = undefined;
           habit.habitDetails.streakCount = Math.max(0, habit.habitDetails.streakCount - 1);
+          habit.habitDetails.completedDates = dates.filter((d) => d !== activeDateStr);
         }
       }
     },

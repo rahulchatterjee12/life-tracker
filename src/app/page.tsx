@@ -45,7 +45,7 @@ import {
   Grid3X3,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'matrix' | 'vault';
+type View = 'dashboard' | 'vault';
 
 export default function Home() {
   const { theme, toggle } = useTheme();
@@ -95,7 +95,6 @@ export default function Home() {
 
   const sidebarNav = [
     { id: 'dashboard' as View, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'matrix' as View, label: 'Habit Matrix', icon: Grid3X3 },
     { id: 'vault' as View, label: 'The Vault', icon: Wallet },
   ];
 
@@ -302,8 +301,11 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setView('matrix')}
+                    onClick={() => {
+                      document.getElementById('habit-matrix-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface border border-border-light hover:bg-surface-2 text-txt text-xs font-medium transition cursor-pointer"
+                    title="Jump down to Habit Consistency Matrix"
                   >
                     <Grid3X3 className="w-3.5 h-3.5 text-accent" />
                     <span className="hidden sm:inline">Habit Matrix</span>
@@ -519,9 +521,12 @@ export default function Home() {
                   )}
                 </div>
               </section>
+
+              {/* Habit Matrix & Performance Analytics Section (Embedded directly on Dashboard) */}
+              <section id="habit-matrix-section" className="pt-6 border-t border-border-light">
+                <HabitMatrixView />
+              </section>
             </>
-          ) : view === 'matrix' ? (
-            <HabitMatrixView />
           ) : (
             /* === VAULT VIEW === */
             <>
