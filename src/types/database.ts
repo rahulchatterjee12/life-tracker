@@ -45,6 +45,7 @@ export interface IUser {
   _id?: Types.ObjectId;
   email: string;
   name: string;
+  password?: string;
   totalPointsEarned: number;
   vaultBalance: number;
   currentStreak: number;

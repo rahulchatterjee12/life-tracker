@@ -26,6 +26,7 @@ const UserSchema = new Schema<IUser>(
   {
     email: { type: String, required: true, unique: true, index: true },
     name: { type: String, required: true },
+    password: { type: String, required: true },
     totalPointsEarned: { type: Number, default: 0 },
     vaultBalance: { type: Number, default: 0 },
     currentStreak: { type: Number, default: 0 },

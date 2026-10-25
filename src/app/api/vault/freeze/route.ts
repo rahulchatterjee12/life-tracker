@@ -1,8 +1,37 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, User, Transaction } from '@/models';
 import { STREAK_FREEZE_POINT_COST } from '@/lib/gamification/engine';
+import { getSession } from '@/lib/auth';
 
 const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
+
+async function getTargetUser() {
+  const session = await getSession();
+  if (session?.userId) {
+    const user = await User.findById(session.userId);
+    if (user) return user;
+  }
+
+  let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
+  if (!user) {
+    user = await User.create({
+      email: DEFAULT_USER_EMAIL,
+      name: 'Lead Architect',
+      password: 'default-demo-password',
+      vaultBalance: 550,
+      totalPointsEarned: 1250,
+      currentStreak: 7,
+      longestStreak: 14,
+      streakFreezesCount: 1,
+      currencyPeg: {
+        pointsPerUnit: 10,
+        currencyCode: 'INR',
+        symbol: '₹',
+      },
+    });
+  }
+  return user;
+}
 
 export async function POST(request: Request) {
   try {
@@ -10,14 +39,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({ action: 'BUY' }));
     const { action = 'BUY', reason = 'Emergency rest day protection' } = body;
 
-    let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
-    if (!user) {
-      user = await User.create({
-        email: DEFAULT_USER_EMAIL,
-        name: 'Lead Architect',
-        vaultBalance: 550,
-      });
-    }
+    const user = await getTargetUser();
 
     if (action === 'BUY') {
       if (user.vaultBalance < STREAK_FREEZE_POINT_COST) {
@@ -94,4 +116,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

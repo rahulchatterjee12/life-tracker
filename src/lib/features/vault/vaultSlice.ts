@@ -234,6 +234,23 @@ export const vaultSlice = createSlice({
     clearVaultError: (state) => {
       state.error = null;
     },
+
+    setUserVaultStats: (
+      state,
+      action: PayloadAction<{
+        vaultBalance: number;
+        totalPointsEarned: number;
+        streakFreezesCount: number;
+        badges?: IUserBadge[];
+      }>
+    ) => {
+      state.vaultBalance = action.payload.vaultBalance;
+      state.totalPointsEarned = action.payload.totalPointsEarned;
+      state.streakFreezesCount = action.payload.streakFreezesCount;
+      if (action.payload.badges && action.payload.badges.length > 0) {
+        state.badges = action.payload.badges;
+      }
+    },
   },
 });
 
@@ -243,6 +260,7 @@ export const {
   consumeStreakFreeze,
   redeemVaultReward,
   clearVaultError,
+  setUserVaultStats,
 } = vaultSlice.actions;
 
 export default vaultSlice.reducer;

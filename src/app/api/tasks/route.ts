@@ -1,32 +1,42 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, Task, User } from '@/models';
+import { getSession } from '@/lib/auth';
 
-// Default demo user identifier
 const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
+
+async function getTargetUser() {
+  const session = await getSession();
+  if (session?.userId) {
+    const user = await User.findById(session.userId);
+    if (user) return user;
+  }
+
+  // Ensure default demo user exists for offline / unauthenticated exploration
+  let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
+  if (!user) {
+    user = await User.create({
+      email: DEFAULT_USER_EMAIL,
+      name: 'Lead Architect',
+      password: 'default-demo-password',
+      totalPointsEarned: 1250,
+      vaultBalance: 550,
+      currentStreak: 7,
+      longestStreak: 14,
+      streakFreezesCount: 1,
+      currencyPeg: {
+        pointsPerUnit: 10,
+        currencyCode: 'INR',
+        symbol: '₹',
+      },
+    });
+  }
+  return user;
+}
 
 export async function GET() {
   try {
     await connectToDatabase();
-
-    // Ensure default user exists
-    let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
-    if (!user) {
-      user = await User.create({
-        email: DEFAULT_USER_EMAIL,
-        name: 'Lead Architect',
-        totalPointsEarned: 1250,
-        vaultBalance: 550,
-        currentStreak: 7,
-        longestStreak: 14,
-        streakFreezesCount: 1,
-        currencyPeg: {
-          pointsPerUnit: 10,
-          currencyCode: 'INR',
-          symbol: '₹',
-        },
-      });
-    }
-
+    const user = await getTargetUser();
     const tasks = await Task.find({ userId: user._id }).sort({ createdAt: -1 });
 
     return NextResponse.json({
@@ -47,14 +57,7 @@ export async function POST(request: Request) {
   try {
     await connectToDatabase();
     const body = await request.json();
-
-    let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
-    if (!user) {
-      user = await User.create({
-        email: DEFAULT_USER_EMAIL,
-        name: 'Lead Architect',
-      });
-    }
+    const user = await getTargetUser();
 
     // If tagging as Eat That Frog, reset other frogs for today
     if (body.isFrog) {
@@ -78,4 +81,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

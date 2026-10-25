@@ -1,7 +1,36 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, User, VaultReward, Transaction } from '@/models';
+import { getSession } from '@/lib/auth';
 
 const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
+
+async function getTargetUser() {
+  const session = await getSession();
+  if (session?.userId) {
+    const user = await User.findById(session.userId);
+    if (user) return user;
+  }
+
+  let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
+  if (!user) {
+    user = await User.create({
+      email: DEFAULT_USER_EMAIL,
+      name: 'Lead Architect',
+      password: 'default-demo-password',
+      vaultBalance: 550,
+      totalPointsEarned: 1250,
+      currentStreak: 7,
+      longestStreak: 14,
+      streakFreezesCount: 1,
+      currencyPeg: {
+        pointsPerUnit: 10,
+        currencyCode: 'INR',
+        symbol: '₹',
+      },
+    });
+  }
+  return user;
+}
 
 export async function POST(request: Request) {
   try {
@@ -25,14 +54,7 @@ export async function POST(request: Request) {
       );
     }
 
-    let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
-    if (!user) {
-      user = await User.create({
-        email: DEFAULT_USER_EMAIL,
-        name: 'Lead Architect',
-        vaultBalance: 550,
-      });
-    }
+    const user = await getTargetUser();
 
     if (user.vaultBalance < reward.pointCost) {
       return NextResponse.json(
@@ -99,4 +121,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

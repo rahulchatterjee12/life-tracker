@@ -1,6 +1,7 @@
 'use client';
 
 import { useTheme } from '@/components/providers/ThemeProvider';
+import { useAuth } from '@/components/providers/AuthProvider';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import {
   toggleHabitCompletion,
@@ -16,6 +17,7 @@ import HybridTimerWidget from '@/components/timer/HybridTimerWidget';
 import HabitStackModal from '@/components/tasks/HabitStackModal';
 import NewTaskModal from '@/components/tasks/NewTaskModal';
 import RetrospectiveModal from '@/components/retrospective/RetrospectiveModal';
+import AuthModal from '@/components/auth/AuthModal';
 import { useState } from 'react';
 import {
   Flame,
@@ -37,12 +39,15 @@ import {
   Play,
   Menu,
   X,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 type View = 'dashboard' | 'vault';
 
 export default function Home() {
   const { theme, toggle } = useTheme();
+  const { user, logout } = useAuth();
   const dispatch = useAppDispatch();
   const tasks = useAppSelector((state) => state.tasks);
   const vault = useAppSelector((state) => state.vault);
@@ -50,6 +55,8 @@ export default function Home() {
   const [view, setView] = useState<View>('dashboard');
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
   const [isRetroModalOpen, setIsRetroModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
   const [expandedAdminTaskId, setExpandedAdminTaskId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -96,6 +103,11 @@ export default function Home() {
       <HabitStackModal />
       <NewTaskModal isOpen={isNewTaskModalOpen} onClose={() => setIsNewTaskModalOpen(false)} />
       <RetrospectiveModal isOpen={isRetroModalOpen} onClose={() => setIsRetroModalOpen(false)} />
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        defaultMode={authModalMode}
+      />
 
       {/* === SIDEBAR (desktop) === */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 border-r border-border bg-surface h-full shrink-0">
@@ -165,6 +177,41 @@ export default function Home() {
             <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
           </button>
         </div>
+
+        {/* User Account / Profile */}
+        <div className="px-5 py-3 border-t border-border">
+          {user ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs font-semibold shrink-0">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-txt truncate">{user.name}</p>
+                  <p className="text-[10px] text-txt-3 truncate">{user.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                title="Log Out"
+                className="text-txt-3 hover:text-bad p-1 rounded-md transition cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setAuthModalMode('signin');
+                setIsAuthModalOpen(true);
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-surface-2 hover:bg-border-light text-xs font-medium text-txt transition cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5 text-accent" />
+              <span>Sign In / Register</span>
+            </button>
+          )}
+        </div>
       </aside>
 
       {/* === MOBILE HEADER === */}
@@ -176,6 +223,26 @@ export default function Home() {
           <h1 className="text-sm font-semibold text-txt">Life Metric</h1>
         </div>
         <div className="flex items-center gap-2">
+          {user ? (
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-[10px] font-semibold">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <button onClick={logout} className="text-txt-3 hover:text-bad p-1 cursor-pointer" title="Log Out">
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setAuthModalMode('signin');
+                setIsAuthModalOpen(true);
+              }}
+              className="text-xs px-2.5 py-1 rounded-lg bg-surface-2 text-txt hover:bg-border-light cursor-pointer font-medium"
+            >
+              Sign In
+            </button>
+          )}
           <span className="text-xs font-medium text-txt-2">{vault.vaultBalance} pts</span>
           <button onClick={toggle} className="text-txt-2 cursor-pointer">
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

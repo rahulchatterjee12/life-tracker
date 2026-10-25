@@ -4,6 +4,7 @@ import { Provider } from 'react-redux';
 import { makeStore } from '@/lib/store';
 import TimerPersistenceProvider from '@/components/providers/TimerPersistenceProvider';
 import ThemeProvider from '@/components/providers/ThemeProvider';
+import AuthProvider from '@/components/providers/AuthProvider';
 
 const store = makeStore();
 
@@ -15,7 +16,9 @@ export default function StoreProvider({
   return (
     <Provider store={store}>
       <ThemeProvider>
-        <TimerPersistenceProvider>{children}</TimerPersistenceProvider>
+        <AuthProvider>
+          <TimerPersistenceProvider>{children}</TimerPersistenceProvider>
+        </AuthProvider>
       </ThemeProvider>
     </Provider>
   );
