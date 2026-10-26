@@ -186,7 +186,7 @@ export const tasksSlice = createSlice({
       const habit = state.items.find((t) => String(t._id) === action.payload);
       if (habit && habit.type === 'HABIT' && habit.habitDetails) {
         habit.completed = !habit.completed;
-        const activeDateStr = '2026-03-27';
+        const activeDateStr = new Date().toISOString().split('T')[0];
         const dates = habit.habitDetails.completedDates || [];
 
         if (habit.completed) {
@@ -288,7 +288,7 @@ export const tasksSlice = createSlice({
       if (task.type === 'HABIT' && task.habitDetails) {
         if (task.completed === completed) return;
         task.completed = completed;
-        const activeDateStr = '2026-03-27';
+        const activeDateStr = new Date().toISOString().split('T')[0];
         const dates = task.habitDetails.completedDates || [];
         if (completed) {
           task.completedAt = new Date();

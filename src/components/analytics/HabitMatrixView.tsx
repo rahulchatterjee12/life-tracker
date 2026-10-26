@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useAppSelector } from '@/lib/hooks';
 import {
   Flame,
@@ -13,101 +13,194 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-const DAYS_IN_MONTH = 31;
-const DAYS_ARRAY = Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1);
-
-// Active tracking day in March 2026 reflecting the dashboard tasks
-const ACTIVE_DAY = 27;
-const MONTH_YEAR = '2026-03';
-
-// Week groupings matching calendar (March 2026 starts on Sunday)
-const WEEKS = [
-  { label: 'Week 1', days: [1, 2, 3, 4, 5, 6, 7] },
-  { label: 'Week 2', days: [8, 9, 10, 11, 12, 13, 14] },
-  { label: 'Week 3', days: [15, 16, 17, 18, 19, 20, 21] },
-  { label: 'Week 4', days: [22, 23, 24, 25, 26, 27, 28] },
-  { label: 'Week 5', days: [29, 30, 31] },
-];
-
 const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+const emptySubscribe = () => () => {};
 
 export default function HabitMatrixView() {
   const tasks = useAppSelector((state) => state.tasks.items);
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
+  const [hoveredSegment, setHoveredSegment] = useState<'completed' | 'missed' | 'pending' | 'upcoming' | null>(null);
 
-  // Filter only habits (matching the daily habits from user's spreadsheet)
-  const habits = tasks.filter((t) => t.type === 'HABIT' && t.habitDetails);
+  // Dynamic date calculations via useSyncExternalStore for hydration-safe server & client synchronization
+  const todayDateStr = useSyncExternalStore(
+    emptySubscribe,
+    () => new Date().toISOString().split('T')[0],
+    () => '2026-10-26'
+  );
 
-  // Helper: check if habit is completed on a specific day
-  // For ACTIVE_DAY (day 27), it reads directly from habit.completed (dashboard pending/completed state)!
-  // For other days, it reads from habit.habitDetails.completedDates.
-  const isHabitCompletedOnDay = (habit: (typeof habits)[0], day: number) => {
-    if (day === ACTIVE_DAY) {
-      return Boolean(habit.completed);
+  const [dateYear, dateMonthNum, dateDayNum] = todayDateStr.split('-').map(Number);
+  const currentYear = dateYear || 2026;
+  const currentMonthNumber = dateMonthNum || 10;
+  const currentMonthIndex = currentMonthNumber - 1; // 0-indexed
+  const ACTIVE_DAY = dateDayNum || 26;
+  const DAYS_IN_MONTH = new Date(currentYear, currentMonthNumber, 0).getDate();
+  const DAYS_ARRAY = Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1);
+  const MONTH_YEAR = `${currentYear}-${String(currentMonthNumber).padStart(2, '0')}`;
+  const now = new Date(currentYear, currentMonthIndex, ACTIVE_DAY);
+  const monthLabel = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  // Dynamically group days into weeks
+  const WEEKS: Array<{ label: string; days: number[] }> = [];
+  for (let i = 0; i < DAYS_IN_MONTH; i += 7) {
+    const weekNum = Math.floor(i / 7) + 1;
+    const weekDays: number[] = [];
+    for (let d = i + 1; d <= Math.min(i + 7, DAYS_IN_MONTH); d++) {
+      weekDays.push(d);
     }
+    WEEKS.push({ label: `Week ${weekNum}`, days: weekDays });
+  }
+
+  // EXCLUSIVELY display habits that are part of a daily routine (filtering out DEEP_WORK, ADMIN, and non-daily tasks)
+  const dailyHabits = tasks.filter(
+    (t) =>
+      t.type === 'HABIT' &&
+      t.habitDetails &&
+      (!t.habitDetails.frequency || t.habitDetails.frequency === 'daily')
+  );
+
+  // Helper: Get habit start day in the active month
+  // Tracking begins exactly from creation date (prior days do not register as missed)
+  const getHabitStartDay = (habit: (typeof dailyHabits)[0]): number => {
+    if (!habit.createdAt) return 1;
+    const created = new Date(habit.createdAt);
+    if (isNaN(created.getTime())) return 1;
+
+    const createdYear = created.getFullYear();
+    const createdMonth = created.getMonth();
+
+    if (createdYear < currentYear || (createdYear === currentYear && createdMonth < currentMonthIndex)) {
+      return 1;
+    }
+    if (createdYear > currentYear || (createdYear === currentYear && createdMonth > currentMonthIndex)) {
+      return DAYS_IN_MONTH + 1; // Future month: not active yet in current month
+    }
+    return Math.min(DAYS_IN_MONTH, Math.max(1, created.getDate()));
+  };
+
+  // Helper: check if a habit was completed on a specific day
+  const isHabitCompletedOnDay = (habit: (typeof dailyHabits)[0], day: number) => {
     const dateStr = `${MONTH_YEAR}-${String(day).padStart(2, '0')}`;
-    return habit.habitDetails?.completedDates?.includes(dateStr) ?? false;
+    if (day === ACTIVE_DAY) {
+      return Boolean(
+        habit.completed ||
+        habit.habitDetails?.completedDates?.includes(dateStr) ||
+        habit.habitDetails?.lastCompletedDate === dateStr
+      );
+    }
+    return Boolean(
+      habit.habitDetails?.completedDates?.includes(dateStr) ||
+      habit.habitDetails?.lastCompletedDate === dateStr
+    );
   };
 
-  // Completed count for a habit across all 31 days
-  const getHabitCompletedCount = (habit: (typeof habits)[0]) => {
-    return DAYS_ARRAY.filter((day) => isHabitCompletedOnDay(habit, day)).length;
+  // Completed count for a habit across its valid tracking days
+  const getHabitCompletedCount = (habit: (typeof dailyHabits)[0]) => {
+    const startDay = getHabitStartDay(habit);
+    return DAYS_ARRAY.filter((day) => day >= startDay && isHabitCompletedOnDay(habit, day)).length;
   };
 
-  // Calculate daily stats across all habits for each day 1..31
+  // 4-SEGMENT AGGREGATE CALCULATIONS
+  // Completed, Missed, Pending, and Upcoming
+  let totalCompleted = 0;
+  let totalMissed = 0;
+  let totalPending = 0;
+  let totalUpcoming = 0;
+
+  dailyHabits.forEach((habit) => {
+    const startDay = getHabitStartDay(habit);
+    for (let d = startDay; d <= DAYS_IN_MONTH; d++) {
+      const isDone = isHabitCompletedOnDay(habit, d);
+      if (d < ACTIVE_DAY) {
+        if (isDone) {
+          totalCompleted += 1;
+        } else {
+          totalMissed += 1;
+        }
+      } else if (d === ACTIVE_DAY) {
+        if (isDone) {
+          totalCompleted += 1;
+        } else {
+          totalPending += 1;
+        }
+      } else {
+        // d > ACTIVE_DAY (future day)
+        totalUpcoming += 1;
+      }
+    }
+  });
+
+  const totalTrackedChecks = totalCompleted + totalMissed + totalPending + totalUpcoming;
+
+  const completedPct = totalTrackedChecks > 0 ? (totalCompleted / totalTrackedChecks) * 100 : 0;
+  const missedPct = totalTrackedChecks > 0 ? (totalMissed / totalTrackedChecks) * 100 : 0;
+  const pendingPct = totalTrackedChecks > 0 ? (totalPending / totalTrackedChecks) * 100 : 0;
+  const upcomingPct = totalTrackedChecks > 0 ? (totalUpcoming / totalTrackedChecks) * 100 : 0;
+
+  // Today's dashboard completion stats
+  const todayActiveHabits = dailyHabits.filter((h) => getHabitStartDay(h) <= ACTIVE_DAY);
+  const todayCompletedCount = todayActiveHabits.filter((h) => isHabitCompletedOnDay(h, ACTIVE_DAY)).length;
+  const todayPendingCount = todayActiveHabits.filter((h) => !isHabitCompletedOnDay(h, ACTIVE_DAY)).length;
+
+  // Best habit by execution rate from creation date
+  const sortedByRate = [...dailyHabits].sort((a, b) => {
+    const startA = getHabitStartDay(a);
+    const trackedA = Math.max(1, DAYS_IN_MONTH - startA + 1);
+    const rateA = getHabitCompletedCount(a) / trackedA;
+
+    const startB = getHabitStartDay(b);
+    const trackedB = Math.max(1, DAYS_IN_MONTH - startB + 1);
+    const rateB = getHabitCompletedCount(b) / trackedB;
+
+    return rateB - rateA;
+  });
+
+  const bestStreak = dailyHabits.reduce((max, h) => Math.max(max, h.habitDetails?.streakCount || 0), 0);
+  const topHabit = sortedByRate[0];
+
+  // Daily Consistency Trend across active habits on each day
   const dailyStats = DAYS_ARRAY.map((day) => {
-    const completedCount = habits.filter((h) => isHabitCompletedOnDay(h, day)).length;
-    const totalHabits = habits.length;
-    const percentage = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
+    const activeOnDay = dailyHabits.filter((h) => getHabitStartDay(h) <= day);
+    const completedCount = activeOnDay.filter((h) => isHabitCompletedOnDay(h, day)).length;
+    const totalHabits = activeOnDay.length;
+    const percentage = totalHabits > 0 && day <= ACTIVE_DAY ? Math.round((completedCount / totalHabits) * 100) : 0;
     return {
       day,
       completed: completedCount,
       total: totalHabits,
       percentage,
+      isFuture: day > ACTIVE_DAY,
     };
   });
 
-  // Calculate overall monthly metrics
-  const totalPossibleChecks = habits.reduce((acc, h) => acc + (h.habitDetails?.monthlyGoal || 31), 0);
-  const totalCompletedChecks = habits.reduce((acc, h) => acc + getHabitCompletedCount(h), 0);
-  const monthlyCompletionRate = totalPossibleChecks > 0 ? Math.round((totalCompletedChecks / totalPossibleChecks) * 100) : 0;
-
-  // Today's dashboard completion stats
-  const todayCompletedCount = habits.filter((h) => h.completed).length;
-  const todayPendingCount = habits.filter((h) => !h.completed).length;
-
-  // Best habit by completion rate
-  const sortedByRate = [...habits].sort((a, b) => {
-    const rateA = getHabitCompletedCount(a) / (a.habitDetails?.monthlyGoal || 31);
-    const rateB = getHabitCompletedCount(b) / (b.habitDetails?.monthlyGoal || 31);
-    return rateB - rateA;
-  });
-
-  const bestStreak = habits.reduce((max, h) => Math.max(max, h.habitDetails?.streakCount || 0), 0);
-  const topHabit = sortedByRate[0];
-
   // Weekly breakdown stats
   const weeklyStats = WEEKS.map((w) => {
-    const totalSlots = habits.length * w.days.length;
     let completedInWeek = 0;
-    w.days.forEach((day) => {
-      habits.forEach((h) => {
-        if (isHabitCompletedOnDay(h, day)) {
-          completedInWeek += 1;
+    let totalSlotsInWeek = 0;
+
+    dailyHabits.forEach((h) => {
+      const startDay = getHabitStartDay(h);
+      w.days.forEach((day) => {
+        if (day >= startDay) {
+          totalSlotsInWeek += 1;
+          if (isHabitCompletedOnDay(h, day)) {
+            completedInWeek += 1;
+          }
         }
       });
     });
-    const pct = totalSlots > 0 ? Math.round((completedInWeek / totalSlots) * 100) : 0;
+
+    const pct = totalSlotsInWeek > 0 ? Math.round((completedInWeek / totalSlotsInWeek) * 100) : 0;
     return {
       label: w.label,
       days: `${w.days[0]}–${w.days[w.days.length - 1]}`,
       completed: completedInWeek,
-      total: totalSlots,
+      total: totalSlotsInWeek,
       percentage: pct,
     };
   });
 
-  // SVG Chart path generation
+  // SVG Chart path generation for Daily Consistency Trend
   const chartWidth = 720;
   const chartHeight = 160;
   const paddingX = 20;
@@ -130,10 +223,19 @@ export default function HabitMatrixView() {
 
   const areaD = `${pathD} L ${points[points.length - 1].x} ${chartHeight - paddingY} L ${points[0].x} ${chartHeight - paddingY} Z`;
 
-  // Donut Ring calculation
+  // 4-Segment Donut Ring Geometry
   const donutRadius = 42;
-  const donutCircumference = 2 * Math.PI * donutRadius;
-  const donutOffset = donutCircumference * (1 - monthlyCompletionRate / 100);
+  const donutCircumference = 2 * Math.PI * donutRadius; // ≈ 263.89
+
+  const completedLen = (completedPct / 100) * donutCircumference;
+  const missedLen = (missedPct / 100) * donutCircumference;
+  const pendingLen = (pendingPct / 100) * donutCircumference;
+  const upcomingLen = (upcomingPct / 100) * donutCircumference;
+
+  const completedOffset = 0;
+  const missedOffset = completedLen;
+  const pendingOffset = completedLen + missedLen;
+  const upcomingOffset = completedLen + missedLen + pendingLen;
 
   return (
     <div className="space-y-6" suppressHydrationWarning>
@@ -146,15 +248,15 @@ export default function HabitMatrixView() {
             </h2>
             <span className="flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
               <CalendarIcon className="w-3 h-3" />
-              March 2026
+              {monthLabel}
             </span>
             <span className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-surface-2 text-txt-2 border border-border-light font-medium">
               <Lock className="w-3 h-3 text-txt-3" />
-              Read-only · Synced from Dashboard
+              Daily Routines · Synced from Dashboard
             </span>
           </div>
           <p className="text-xs text-txt-2 mt-1">
-            Real-time visual curves, monthly progress ring, and weekly momentum driven by your dashboard tasks.
+            Real-time 4-segment execution breakdown, daily consistency curve, and 31-day tracking matrix.
           </p>
         </div>
 
@@ -164,10 +266,10 @@ export default function HabitMatrixView() {
             <CheckCircle2 className="w-3.5 h-3.5 text-ok" />
             <span className="text-txt-2">Today:</span>
             <span className="font-semibold text-txt">
-              {todayCompletedCount}/{habits.length} Done
+              {todayCompletedCount}/{todayActiveHabits.length} Done
             </span>
             {todayPendingCount > 0 && (
-              <span className="text-[10px] text-txt-3">({todayPendingCount} pending)</span>
+              <span className="text-[10px] text-warn font-medium">({todayPendingCount} pending)</span>
             )}
           </div>
           {topHabit && (
@@ -179,8 +281,8 @@ export default function HabitMatrixView() {
           )}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border-light text-xs">
             <TrendingUp className="w-3.5 h-3.5 text-ok" />
-            <span className="text-txt-2">Rate:</span>
-            <span className="font-semibold text-txt">{monthlyCompletionRate}%</span>
+            <span className="text-txt-2">Completed:</span>
+            <span className="font-semibold text-txt">{completedPct.toFixed(1)}%</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border-light text-xs">
             <Flame className="w-3.5 h-3.5 text-warn" />
@@ -192,8 +294,8 @@ export default function HabitMatrixView() {
 
       {/* === ROW 1: CHARTS & STATS === */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Daily Completion Trend Line Chart (8 cols) */}
-        <div className="lg:col-span-8 p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3">
+        {/* Daily Completion Trend Line Chart (7 cols on lg) */}
+        <div className="lg:col-span-7 p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="p-1 rounded-lg bg-accent/10 text-accent">
@@ -294,10 +396,11 @@ export default function HabitMatrixView() {
                           ? 'fill-accent stroke-bg stroke-2 transition-all'
                           : isTodayPoint
                           ? 'fill-ok stroke-bg stroke-1'
+                          : p.isFuture
+                          ? 'fill-txt-3/30'
                           : 'fill-accent'
                       }
                     />
-                    {/* Transparent touch/hover hit zone */}
                     <circle cx={p.x} cy={p.y} r={12} fill="transparent" />
                   </g>
                 );
@@ -310,69 +413,289 @@ export default function HabitMatrixView() {
               <span>Day 8</span>
               <span>Day 15</span>
               <span>Day 22</span>
-              <span className="text-accent font-semibold">Day 27 (Today)</span>
-              <span>Day 31</span>
+              <span className="text-accent font-semibold">Day {ACTIVE_DAY} (Today)</span>
+              <span>Day {DAYS_IN_MONTH}</span>
             </div>
           </div>
         </div>
 
-        {/* Overview Monthly Progress Donut (4 cols) */}
-        <div className="lg:col-span-4 p-5 rounded-2xl bg-surface border border-border shadow-xs flex flex-col justify-between">
-          <div className="flex items-center gap-2">
-            <span className="p-1 rounded-lg bg-ok/10 text-ok">
-              <Sparkles className="w-4 h-4" />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-txt">Monthly Progress</h3>
-              <p className="text-[11px] text-txt-3">Target vs executed checks</p>
+        {/* HABIT METRICS CARD (5 cols on lg) - 4 DISTINCT SEGMENTS */}
+        <div className="lg:col-span-5 p-5 rounded-2xl bg-surface border border-border shadow-xs flex flex-col justify-between space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-lg bg-ok/10 text-ok">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-txt">Habit Metrics</h3>
+                <p className="text-[11px] text-txt-3">Monthly daily routine execution &amp; forecast</p>
+              </div>
             </div>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium whitespace-nowrap">
+              {dailyHabits.length} Daily Habits
+            </span>
           </div>
 
-          {/* Donut Chart */}
-          <div className="flex items-center justify-center my-3 relative">
-            <svg width="120" height="120" className="-rotate-90">
+          {/* 4-Segment Donut Chart */}
+          <div className="flex items-center justify-center relative my-1">
+            <svg width="130" height="130" className="-rotate-90 overflow-visible">
+              {/* Background ring */}
               <circle
-                cx="60"
-                cy="60"
+                cx="65"
+                cy="65"
                 r={donutRadius}
                 fill="none"
                 stroke="currentColor"
                 className="text-surface-2"
-                strokeWidth="8"
+                strokeWidth="9"
               />
-              <circle
-                cx="60"
-                cy="60"
-                r={donutRadius}
-                fill="none"
-                stroke="var(--accent)"
-                strokeWidth="8"
-                strokeDasharray={donutCircumference}
-                strokeDashoffset={donutOffset}
-                strokeLinecap="round"
-                className="transition-all duration-700 ease-out"
-              />
+
+              {/* Segment 1: Completed (Green) */}
+              {completedLen > 0 && (
+                <circle
+                  cx="65"
+                  cy="65"
+                  r={donutRadius}
+                  fill="none"
+                  stroke="var(--ok)"
+                  strokeWidth={hoveredSegment === 'completed' ? 11 : 9}
+                  strokeDasharray={`${Math.max(0, completedLen - 1)} ${donutCircumference}`}
+                  strokeDashoffset={-completedOffset}
+                  className="transition-all duration-500 ease-out cursor-pointer"
+                  onMouseEnter={() => setHoveredSegment('completed')}
+                  onMouseLeave={() => setHoveredSegment(null)}
+                />
+              )}
+
+              {/* Segment 2: Missed (Red) */}
+              {missedLen > 0 && (
+                <circle
+                  cx="65"
+                  cy="65"
+                  r={donutRadius}
+                  fill="none"
+                  stroke="var(--bad)"
+                  strokeWidth={hoveredSegment === 'missed' ? 11 : 9}
+                  strokeDasharray={`${Math.max(0, missedLen - 1)} ${donutCircumference}`}
+                  strokeDashoffset={-missedOffset}
+                  className="transition-all duration-500 ease-out cursor-pointer"
+                  onMouseEnter={() => setHoveredSegment('missed')}
+                  onMouseLeave={() => setHoveredSegment(null)}
+                />
+              )}
+
+              {/* Segment 3: Pending (Amber) */}
+              {pendingLen > 0 && (
+                <circle
+                  cx="65"
+                  cy="65"
+                  r={donutRadius}
+                  fill="none"
+                  stroke="var(--warn)"
+                  strokeWidth={hoveredSegment === 'pending' ? 11 : 9}
+                  strokeDasharray={`${Math.max(0, pendingLen - 1)} ${donutCircumference}`}
+                  strokeDashoffset={-pendingOffset}
+                  className="transition-all duration-500 ease-out cursor-pointer"
+                  onMouseEnter={() => setHoveredSegment('pending')}
+                  onMouseLeave={() => setHoveredSegment(null)}
+                />
+              )}
+
+              {/* Segment 4: Upcoming (Indigo / Subtle neutral) */}
+              {upcomingLen > 0 && (
+                <circle
+                  cx="65"
+                  cy="65"
+                  r={donutRadius}
+                  fill="none"
+                  stroke="var(--accent)"
+                  opacity={0.45}
+                  strokeWidth={hoveredSegment === 'upcoming' ? 11 : 9}
+                  strokeDasharray={`${Math.max(0, upcomingLen - 1)} ${donutCircumference}`}
+                  strokeDashoffset={-upcomingOffset}
+                  className="transition-all duration-500 ease-out cursor-pointer"
+                  onMouseEnter={() => setHoveredSegment('upcoming')}
+                  onMouseLeave={() => setHoveredSegment(null)}
+                />
+              )}
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-2xl font-bold text-txt">
-                {monthlyCompletionRate}%
-              </span>
-              <span className="text-[10px] text-txt-3">Completed</span>
+
+            {/* Dynamic Center Label */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+              {hoveredSegment === 'missed' ? (
+                <>
+                  <span className="text-2xl font-bold text-bad tabular-nums">
+                    {missedPct.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] text-bad uppercase font-medium tracking-wider">Missed</span>
+                </>
+              ) : hoveredSegment === 'pending' ? (
+                <>
+                  <span className="text-2xl font-bold text-warn tabular-nums">
+                    {pendingPct.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] text-warn uppercase font-medium tracking-wider">Pending</span>
+                </>
+              ) : hoveredSegment === 'upcoming' ? (
+                <>
+                  <span className="text-2xl font-bold text-accent tabular-nums">
+                    {upcomingPct.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] text-accent uppercase font-medium tracking-wider">Upcoming</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-2xl font-bold text-ok tabular-nums">
+                    {completedPct.toFixed(1)}%
+                  </span>
+                  <span className="text-[10px] text-txt-3 uppercase font-medium tracking-wider">Completed</span>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border-light text-center">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-txt-3 font-medium">Completed</p>
-              <p className="text-base font-semibold text-ok mt-0.5">{totalCompletedChecks}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-txt-3 font-medium">Remaining</p>
-              <p className="text-base font-semibold text-txt mt-0.5">
-                {Math.max(0, totalPossibleChecks - totalCompletedChecks)}
-              </p>
+          {/* 4-Segment Horizontal Progress Distribution Bar */}
+          <div className="space-y-1">
+            <div className="h-2 w-full rounded-full bg-surface-2 flex overflow-hidden p-0.5 gap-0.5">
+              {completedPct > 0 && (
+                <div
+                  style={{ width: `${completedPct}%` }}
+                  className="h-full rounded-sm bg-ok transition-all duration-500"
+                  title={`Completed: ${completedPct.toFixed(1)}%`}
+                />
+              )}
+              {missedPct > 0 && (
+                <div
+                  style={{ width: `${missedPct}%` }}
+                  className="h-full rounded-sm bg-bad transition-all duration-500"
+                  title={`Missed: ${missedPct.toFixed(1)}%`}
+                />
+              )}
+              {pendingPct > 0 && (
+                <div
+                  style={{ width: `${pendingPct}%` }}
+                  className="h-full rounded-sm bg-warn transition-all duration-500"
+                  title={`Pending: ${pendingPct.toFixed(1)}%`}
+                />
+              )}
+              {upcomingPct > 0 && (
+                <div
+                  style={{ width: `${upcomingPct}%` }}
+                  className="h-full rounded-sm bg-accent/45 transition-all duration-500"
+                  title={`Upcoming: ${upcomingPct.toFixed(1)}%`}
+                />
+              )}
             </div>
           </div>
+
+          {/* 4 Distinct KPI Segments Grid */}
+          <div className="grid grid-cols-2 gap-2 text-left">
+            {/* Completed */}
+            <div
+              onMouseEnter={() => setHoveredSegment('completed')}
+              onMouseLeave={() => setHoveredSegment(null)}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                hoveredSegment === 'completed'
+                  ? 'bg-ok/10 border-ok shadow-xs'
+                  : 'bg-surface-2/60 border-border-light hover:border-ok/40'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-txt-2">
+                  <span className="w-2 h-2 rounded-full bg-ok" />
+                  Completed
+                </span>
+                <span className="text-xs font-mono font-bold text-ok">
+                  {completedPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                <span className="text-txt font-semibold">{totalCompleted}</span>
+                <span className="text-[10px] text-txt-3">checks</span>
+              </div>
+            </div>
+
+            {/* Missed */}
+            <div
+              onMouseEnter={() => setHoveredSegment('missed')}
+              onMouseLeave={() => setHoveredSegment(null)}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                hoveredSegment === 'missed'
+                  ? 'bg-bad/10 border-bad shadow-xs'
+                  : 'bg-surface-2/60 border-border-light hover:border-bad/40'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-txt-2">
+                  <span className="w-2 h-2 rounded-full bg-bad" />
+                  Missed
+                </span>
+                <span className="text-xs font-mono font-bold text-bad">
+                  {missedPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                <span className="text-txt font-semibold">{totalMissed}</span>
+                <span className="text-[10px] text-txt-3">checks</span>
+              </div>
+            </div>
+
+            {/* Pending */}
+            <div
+              onMouseEnter={() => setHoveredSegment('pending')}
+              onMouseLeave={() => setHoveredSegment(null)}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                hoveredSegment === 'pending'
+                  ? 'bg-warn/10 border-warn shadow-xs'
+                  : 'bg-surface-2/60 border-border-light hover:border-warn/40'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-txt-2">
+                  <span className="w-2 h-2 rounded-full bg-warn" />
+                  Pending
+                </span>
+                <span className="text-xs font-mono font-bold text-warn">
+                  {pendingPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                <span className="text-txt font-semibold">{totalPending}</span>
+                <span className="text-[10px] text-txt-3">today</span>
+              </div>
+            </div>
+
+            {/* Upcoming */}
+            <div
+              onMouseEnter={() => setHoveredSegment('upcoming')}
+              onMouseLeave={() => setHoveredSegment(null)}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                hoveredSegment === 'upcoming'
+                  ? 'bg-accent/15 border-accent shadow-xs'
+                  : 'bg-surface-2/60 border-border-light hover:border-accent/40'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-txt-2">
+                  <span className="w-2 h-2 rounded-full bg-accent/60" />
+                  Upcoming
+                </span>
+                <span className="text-xs font-mono font-bold text-accent">
+                  {upcomingPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between text-[11px]">
+                <span className="text-txt font-semibold">{totalUpcoming}</span>
+                <span className="text-[10px] text-txt-3">future days</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Creation date rule footnote */}
+          <p className="text-[10px] text-txt-3 leading-tight pt-2 border-t border-border-light text-center">
+            Tracking starts from item creation date (prior days not missed) · Daily habits only
+          </p>
         </div>
       </div>
 
@@ -407,29 +730,31 @@ export default function HabitMatrixView() {
         </div>
       </div>
 
-      {/* === ROW 3: TOP 10 HABITS LEADERBOARD === */}
+      {/* === ROW 3: TOP HABITS LEADERBOARD === */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-txt-2">
             Top Consistency Leaderboard
           </h3>
-          <span className="text-xs text-txt-3">Ranked by monthly execution</span>
+          <span className="text-xs text-txt-3">Ranked by execution rate since creation</span>
         </div>
 
-        {habits.length === 0 ? (
+        {dailyHabits.length === 0 ? (
           <div className="p-6 rounded-xl bg-surface border border-border-light text-center space-y-1">
-            <p className="text-xs font-medium text-txt">No habits created yet</p>
+            <p className="text-xs font-medium text-txt">No daily habits created yet</p>
             <p className="text-[11px] text-txt-3">
-              Add habits in Manage Tasks to see your consistency rankings here.
+              Add daily routine habits in Manage Tasks to view your consistency rankings here.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sortedByRate.slice(0, 6).map((habit, idx) => {
+              const startDay = getHabitStartDay(habit);
+              const trackedDays = Math.max(1, DAYS_IN_MONTH - startDay + 1);
               const completedCount = getHabitCompletedCount(habit);
-              const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
-              const rate = Math.round((completedCount / monthlyGoal) * 100);
+              const rate = Math.round((completedCount / trackedDays) * 100);
               const streak = habit.habitDetails?.streakCount || 0;
+              const isDoneToday = isHabitCompletedOnDay(habit, ACTIVE_DAY);
 
               return (
                 <div
@@ -444,14 +769,14 @@ export default function HabitMatrixView() {
                       <p className="text-xs font-medium text-txt truncate">{habit.title}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[11px] text-txt-3 font-mono">
-                          {completedCount}/{monthlyGoal} ({rate}%)
+                          {completedCount}/{trackedDays} ({rate}%)
                         </span>
-                        {habit.completed ? (
+                        {isDoneToday ? (
                           <span className="text-[10px] text-ok font-medium flex items-center gap-0.5">
                             <Check className="w-2.5 h-2.5" /> Done
                           </span>
                         ) : (
-                          <span className="text-[10px] text-txt-3">Pending</span>
+                          <span className="text-[10px] text-warn font-medium">Pending</span>
                         )}
                       </div>
                     </div>
@@ -480,11 +805,12 @@ export default function HabitMatrixView() {
               31-Day Habit Tracking Matrix
             </h3>
             <p className="text-xs text-txt-3">
-              Read-only matrix synchronized with your dashboard pending and completed tasks.
+              Read-only matrix synchronized with your dashboard pending and completed habits.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-txt-3">
+          {/* 5-State Legend */}
+          <div className="flex items-center gap-3 text-xs text-txt-3 flex-wrap">
             <div className="flex items-center gap-1.5">
               <div className="w-3.5 h-3.5 rounded bg-ok/20 border border-ok/40 flex items-center justify-center">
                 <Check className="w-2.5 h-2.5 text-ok" />
@@ -492,12 +818,22 @@ export default function HabitMatrixView() {
               <span>Completed</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 rounded bg-surface-2 border border-dashed border-txt-3/50" />
+              <div className="w-3.5 h-3.5 rounded bg-bad/15 border border-bad/30 flex items-center justify-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-bad" />
+              </div>
+              <span>Missed</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-warn/15 border border-dashed border-warn" />
               <span>Pending Today</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3.5 h-3.5 rounded bg-surface-2/40 border border-border-light" />
-              <span>Unmarked</span>
+              <span>Upcoming</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-xs text-txt-3/50 font-bold">—</span>
+              <span>Prior to Creation</span>
             </div>
           </div>
         </div>
@@ -509,13 +845,13 @@ export default function HabitMatrixView() {
               {/* Week Column Spans */}
               <tr className="bg-surface-2/60 border-b border-border-light text-[11px] text-txt-2">
                 <th className="sticky left-0 z-20 bg-surface-2 px-3 py-2 min-w-[170px]">
-                  Daily Habits ({habits.length})
+                  Daily Habits ({dailyHabits.length})
                 </th>
                 <th className="px-2 py-2 text-center border-r border-border-light min-w-[65px]">
                   Today
                 </th>
                 <th className="px-2 py-2 text-center border-r border-border-light min-w-[50px]">
-                  Goal
+                  Days
                 </th>
                 {WEEKS.map((w) => (
                   <th
@@ -527,7 +863,7 @@ export default function HabitMatrixView() {
                   </th>
                 ))}
                 <th className="px-3 py-2 text-center min-w-[110px]">
-                  Progress
+                  Rate
                 </th>
               </tr>
 
@@ -540,11 +876,12 @@ export default function HabitMatrixView() {
                   Status
                 </th>
                 <th className="px-1 py-1 text-center border-r border-border-light">
-                  Days
+                  Active
                 </th>
                 {DAYS_ARRAY.map((day) => {
-                  const dayOfWeek = DAY_NAMES[(day - 1) % 7];
-                  const isWeekEnd = day % 7 === 0;
+                  const dayDate = new Date(currentYear, currentMonthIndex, day);
+                  const dayOfWeek = DAY_NAMES[dayDate.getDay()];
+                  const isWeekEnd = dayDate.getDay() === 0 || dayDate.getDay() === 6;
                   const isToday = day === ACTIVE_DAY;
                   return (
                     <th
@@ -564,12 +901,12 @@ export default function HabitMatrixView() {
                     </th>
                   );
                 })}
-                <th className="px-2 py-1 text-center font-normal">Rate</th>
+                <th className="px-2 py-1 text-center font-normal">Progress</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-border-light bg-bg text-xs">
-              {habits.length === 0 ? (
+              {dailyHabits.length === 0 ? (
                 <tr>
                   <td
                     colSpan={DAYS_IN_MONTH + 4}
@@ -577,116 +914,137 @@ export default function HabitMatrixView() {
                   >
                     <div className="flex flex-col items-center justify-center space-y-1.5">
                       <Flame className="w-6 h-6 text-txt-3 opacity-40 mb-1" />
-                      <p className="text-xs font-medium text-txt">No daily habits to display</p>
+                      <p className="text-xs font-medium text-txt">No daily routine habits to display</p>
                       <p className="text-[11px] text-txt-3 max-w-sm">
-                        Create habits in Manage Tasks to track your 31-day visual streak matrix.
+                        Create habits in Manage Tasks to track your 31-day visual streak matrix. One-off deep work tasks and admin items are excluded.
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                habits.map((habit) => {
-                const habitId = String(habit._id);
-                const completedCount = getHabitCompletedCount(habit);
-                const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
-                const rate = Math.round((completedCount / monthlyGoal) * 100);
-                const streak = habit.habitDetails?.streakCount || 0;
-                const isDoneToday = Boolean(habit.completed);
+                dailyHabits.map((habit) => {
+                  const habitId = String(habit._id);
+                  const startDay = getHabitStartDay(habit);
+                  const trackedDays = Math.max(1, DAYS_IN_MONTH - startDay + 1);
+                  const completedCount = getHabitCompletedCount(habit);
+                  const rate = Math.round((completedCount / trackedDays) * 100);
+                  const streak = habit.habitDetails?.streakCount || 0;
+                  const isDoneToday = isHabitCompletedOnDay(habit, ACTIVE_DAY);
 
-                return (
-                  <tr
-                    key={habitId}
-                    className="hover:bg-surface-2/40 transition-colors group"
-                  >
-                    {/* Sticky Left: Habit Title & Streak */}
-                    <td className="sticky left-0 z-10 bg-bg group-hover:bg-surface-2/40 px-3 py-2.5 font-medium text-txt truncate max-w-[180px] border-r border-border-light shadow-[1px_0_0_0_var(--border-light)]">
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="truncate">{habit.title}</span>
-                        {streak > 0 && (
-                          <span className="flex items-center gap-0.5 text-[10px] text-warn font-semibold font-mono shrink-0">
-                            <Flame className="w-3 h-3" />
-                            {streak}
+                  return (
+                    <tr
+                      key={habitId}
+                      className="hover:bg-surface-2/40 transition-colors group"
+                    >
+                      {/* Sticky Left: Habit Title & Streak */}
+                      <td className="sticky left-0 z-10 bg-bg group-hover:bg-surface-2/40 px-3 py-2.5 font-medium text-txt truncate max-w-[180px] border-r border-border-light shadow-[1px_0_0_0_var(--border-light)]">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="truncate">{habit.title}</span>
+                          {streak > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-warn font-semibold font-mono shrink-0">
+                              <Flame className="w-3 h-3" />
+                              {streak}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Today's Status Column */}
+                      <td className="px-2 py-2.5 text-center border-r border-border-light">
+                        {isDoneToday ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-ok/10 text-ok border border-ok/20">
+                            <Check className="w-2.5 h-2.5" /> Done
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-warn/10 text-warn border border-warn/20">
+                            Pending
                           </span>
                         )}
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Today's Status Column */}
-                    <td className="px-2 py-2.5 text-center border-r border-border-light">
-                      {isDoneToday ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-ok/10 text-ok border border-ok/20">
-                          <Check className="w-2.5 h-2.5" /> Done
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-2 text-txt-3 border border-border-light">
-                          Pending
-                        </span>
-                      )}
-                    </td>
+                      {/* Active Days Column */}
+                      <td className="px-2 py-2.5 text-center font-mono text-[11px] text-txt-3 border-r border-border-light">
+                        {trackedDays}d
+                      </td>
 
-                    {/* Goal Column */}
-                    <td className="px-2 py-2.5 text-center font-mono text-[11px] text-txt-3 border-r border-border-light">
-                      {monthlyGoal}
-                    </td>
+                      {/* 31 Day Read-Only Matrix Cells */}
+                      {DAYS_ARRAY.map((day) => {
+                        const dayDate = new Date(currentYear, currentMonthIndex, day);
+                        const isWeekEnd = dayDate.getDay() === 0 || dayDate.getDay() === 6;
+                        const isPrior = day < startDay;
+                        const isCompleted = isHabitCompletedOnDay(habit, day);
+                        const isToday = day === ACTIVE_DAY;
+                        const isFuture = day > ACTIVE_DAY;
+                        const isMissed = !isPrior && !isToday && !isFuture && !isCompleted;
 
-                    {/* 31 Day Read-Only Matrix Cells */}
-                    {DAYS_ARRAY.map((day) => {
-                      const isCompleted = isHabitCompletedOnDay(habit, day);
-                      const isWeekEnd = day % 7 === 0;
-                      const isToday = day === ACTIVE_DAY;
-
-                      return (
-                        <td
-                          key={day}
-                          className={`p-0.5 text-center align-middle ${
-                            isToday ? 'bg-accent/5' : ''
-                          } ${
-                            isWeekEnd ? 'border-r border-border-light' : ''
-                          }`}
-                        >
-                          <div
-                            className={`w-5 h-5 rounded-md mx-auto flex items-center justify-center transition-all select-none ${
-                              isCompleted
-                                ? 'bg-ok/20 text-ok border border-ok/40'
-                                : isToday
-                                ? 'bg-surface-2 border border-dashed border-txt-3/50 text-transparent'
-                                : 'bg-surface-2/40 border border-border-light/60 text-transparent'
+                        return (
+                          <td
+                            key={day}
+                            className={`p-0.5 text-center align-middle ${
+                              isToday ? 'bg-accent/5' : ''
+                            } ${
+                              isWeekEnd ? 'border-r border-border-light' : ''
                             }`}
-                            title={
-                              isToday
-                                ? `Day ${day} (Today): ${isCompleted ? 'Done on Dashboard' : 'Pending on Dashboard'}`
-                                : `Day ${day}: ${isCompleted ? 'Completed' : 'Unmarked'}`
-                            }
                           >
-                            {isCompleted ? <Check className="w-3 h-3 stroke-[2.5]" /> : null}
-                          </div>
-                        </td>
-                      );
-                    })}
+                            <div
+                              className={`w-5 h-5 rounded-md mx-auto flex items-center justify-center transition-all select-none ${
+                                isPrior
+                                  ? 'text-txt-3/30'
+                                  : isCompleted
+                                  ? 'bg-ok/20 text-ok border border-ok/40'
+                                  : isToday
+                                  ? 'bg-warn/15 border border-dashed border-warn text-transparent'
+                                  : isMissed
+                                  ? 'bg-bad/10 border border-bad/30 text-bad/60'
+                                  : 'bg-surface-2/40 border border-border-light/60 text-transparent'
+                              }`}
+                              title={
+                                isPrior
+                                  ? `Day ${day}: Prior to habit creation (${habit.createdAt ? new Date(habit.createdAt).toLocaleDateString() : 'Day ' + startDay}) - Not counted as missed`
+                                  : isToday
+                                  ? `Day ${day} (Today): ${isCompleted ? 'Done on Dashboard' : 'Pending on Dashboard'}`
+                                  : isCompleted
+                                  ? `Day ${day}: Completed`
+                                  : isMissed
+                                  ? `Day ${day}: Missed`
+                                  : `Day ${day}: Upcoming`
+                              }
+                            >
+                              {isPrior ? (
+                                <span className="font-mono text-[9px] text-txt-3/40 font-bold">—</span>
+                              ) : isCompleted ? (
+                                <Check className="w-3 h-3 stroke-[2.5]" />
+                              ) : isMissed ? (
+                                <span className="w-1.5 h-1.5 rounded-full bg-bad/60" />
+                              ) : null}
+                            </div>
+                          </td>
+                        );
+                      })}
 
-                    {/* Right Progress Meter Column */}
-                    <td className="px-3 py-2.5 min-w-[110px]">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-txt font-mono">{rate}%</span>
-                          <span className="text-[10px] text-txt-3 font-mono">
-                            {completedCount}/{monthlyGoal}
-                          </span>
+                      {/* Right Progress Meter Column */}
+                      <td className="px-3 py-2.5 min-w-[110px]">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-txt font-mono">{rate}%</span>
+                            <span className="text-[10px] text-txt-3 font-mono">
+                              {completedCount}/{trackedDays}
+                            </span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                rate >= 75 ? 'bg-ok' : rate >= 50 ? 'bg-accent' : 'bg-warn'
+                              }`}
+                              style={{ width: `${Math.min(100, rate)}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              rate >= 75 ? 'bg-ok' : rate >= 50 ? 'bg-accent' : 'bg-warn'
-                            }`}
-                            style={{ width: `${Math.min(100, rate)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
