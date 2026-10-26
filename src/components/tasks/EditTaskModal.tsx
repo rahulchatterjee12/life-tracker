@@ -5,7 +5,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import { updateTask } from '@/lib/features/tasks/tasksSlice';
 import { ITask, TaskImportance, HabitFrequency, AdminRecurringCycle } from '@/types/database';
-import { X, Calendar, Clock, Flame } from 'lucide-react';
+import { X, Calendar, Clock, Flame, Link as LinkIcon } from 'lucide-react';
+
+const WEEK_DAYS = [
+  { day: 0, label: 'Sun', short: 'S' },
+  { day: 1, label: 'Mon', short: 'M' },
+  { day: 2, label: 'Tue', short: 'T' },
+  { day: 3, label: 'Wed', short: 'W' },
+  { day: 4, label: 'Thu', short: 'T' },
+  { day: 5, label: 'Fri', short: 'F' },
+  { day: 6, label: 'Sat', short: 'S' },
+];
 
 interface EditTaskModalProps {
   isOpen: boolean;
@@ -19,6 +29,7 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
 
   const [title, setTitle] = useState(task.title || '');
   const [description, setDescription] = useState(task.description || '');
+  const [url, setUrl] = useState(task.url || '');
   const [importance, setImportance] = useState<TaskImportance>((task.importance as TaskImportance) || 3);
   const [isFrog, setIsFrog] = useState(Boolean(task.isFrog));
 
@@ -27,16 +38,33 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
     task.deepWorkDetails?.targetDurationMinutes || 45
   );
 
-  // Habit fields
-  const [habitFrequency, setHabitFrequency] = useState<HabitFrequency>(
-    task.habitDetails?.frequency || 'daily'
-  );
+  // Habit fields & weekly recurrence
+  const getInitialDays = (): number[] => {
+    if (task.habitDetails?.customDays && task.habitDetails.customDays.length > 0) {
+      return [...task.habitDetails.customDays];
+    }
+    if (task.habitDetails?.frequency === 'weekdays') return [1, 2, 3, 4, 5];
+    if (task.habitDetails?.frequency === 'weekends') return [0, 6];
+    return [0, 1, 2, 3, 4, 5, 6];
+  };
+
+  const [selectedDays, setSelectedDays] = useState<number[]>(getInitialDays);
   const [monthlyGoal, setMonthlyGoal] = useState<number>(
     task.habitDetails?.monthlyGoal || 31
   );
   const [nextTaskId, setNextTaskId] = useState<string>(
     task.habitDetails?.nextTaskId ? String(task.habitDetails.nextTaskId) : ''
   );
+
+  const toggleDay = (d: number) => {
+    if (selectedDays.includes(d)) {
+      if (selectedDays.length > 1) {
+        setSelectedDays(selectedDays.filter((x) => x !== d));
+      }
+    } else {
+      setSelectedDays([...selectedDays, d].sort((a, b) => a - b));
+    }
+  };
 
   // Admin fields
   const getInitialDueDate = () => {
@@ -60,17 +88,22 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
 
     const taskId = String(task._id);
 
+    const isAllDays = selectedDays.length === 7;
+    const computedFreq: HabitFrequency = isAllDays ? 'daily' : 'custom';
+
     const updatePayload = {
       id: taskId,
       title: title.trim(),
       description: description.trim() || undefined,
+      url: url.trim() || undefined,
       importance,
       isFrog,
       type: task.type,
       habitDetails:
         task.type === 'HABIT'
           ? {
-              frequency: habitFrequency,
+              frequency: computedFreq,
+              customDays: selectedDays,
               monthlyGoal,
               nextTaskId: nextTaskId || undefined,
             }
@@ -169,6 +202,21 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
           />
         </div>
 
+        {/* Resource URL (Optional) */}
+        <div>
+          <label className="flex items-center gap-1 text-[11px] font-medium uppercase text-txt-2 mb-1">
+            <LinkIcon className="w-3 h-3 text-accent" />
+            <span>Resource URL (Optional)</span>
+          </label>
+          <input
+            type="url"
+            placeholder="https://example.com/guide..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl bg-bg border border-border text-xs text-txt placeholder-txt-3 focus:outline-hidden focus:border-accent"
+          />
+        </div>
+
         {/* Importance Rating & Eat That Frog */}
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -220,35 +268,90 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
 
         {task.type === 'HABIT' && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-medium uppercase text-txt-2 mb-1">
-                  Frequency
+            {/* Weekly Recurrence Day Selector with full flexibility */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-medium uppercase text-txt-2">
+                  Weekly Recurrence ({selectedDays.length}/7 days)
                 </label>
-                <select
-                  value={habitFrequency}
-                  onChange={(e) => setHabitFrequency(e.target.value as HabitFrequency)}
-                  className="w-full px-2.5 py-2 rounded-xl bg-bg border border-border text-xs text-txt focus:outline-hidden focus:border-accent"
-                >
-                  <option value="daily">Daily</option>
-                  <option value="weekdays">Weekdays</option>
-                  <option value="custom">Custom Days</option>
-                </select>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDays([0, 1, 2, 3, 4, 5, 6])}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                      selectedDays.length === 7
+                        ? 'bg-accent/15 text-accent font-semibold'
+                        : 'text-txt-3 hover:text-txt'
+                    }`}
+                  >
+                    Every day
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDays([1, 2, 3, 4, 5])}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                      selectedDays.length === 5 && !selectedDays.includes(0) && !selectedDays.includes(6)
+                        ? 'bg-accent/15 text-accent font-semibold'
+                        : 'text-txt-3 hover:text-txt'
+                    }`}
+                  >
+                    Weekdays
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDays([0, 6])}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                      selectedDays.length === 2 && selectedDays.includes(0) && selectedDays.includes(6)
+                        ? 'bg-accent/15 text-accent font-semibold'
+                        : 'text-txt-3 hover:text-txt'
+                    }`}
+                  >
+                    Weekends
+                  </button>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-medium uppercase text-txt-2 mb-1">
-                  Monthly Goal (Days)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={monthlyGoal}
-                  onChange={(e) => setMonthlyGoal(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-bg border border-border text-xs text-txt focus:outline-hidden focus:border-accent"
-                />
+              {/* 7 Interactive Day Buttons */}
+              <div className="grid grid-cols-7 gap-1.5">
+                {WEEK_DAYS.map((wd) => {
+                  const isSelected = selectedDays.includes(wd.day);
+                  return (
+                    <button
+                      key={wd.day}
+                      type="button"
+                      onClick={() => toggleDay(wd.day)}
+                      className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-xs transition cursor-pointer select-none ${
+                        isSelected
+                          ? 'bg-accent text-white font-semibold shadow-xs'
+                          : 'bg-surface-2 text-txt-3 hover:text-txt hover:bg-border-light border border-border-light'
+                      }`}
+                      title={`Toggle ${wd.label}`}
+                    >
+                      <span className="text-[10px] opacity-75">{wd.short}</span>
+                      <span className="text-[11px] font-medium">{wd.label}</span>
+                    </button>
+                  );
+                })}
               </div>
+              <p className="text-[10px] text-txt-3">
+                {selectedDays.length === 7
+                  ? 'Scheduled every day (Daily Routine)'
+                  : `Scheduled on: ${selectedDays.map((d) => WEEK_DAYS[d].label).join(', ')}`}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium uppercase text-txt-2 mb-1">
+                Monthly Goal (Days)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={monthlyGoal}
+                onChange={(e) => setMonthlyGoal(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-bg border border-border text-xs text-txt focus:outline-hidden focus:border-accent"
+              />
             </div>
 
             <div>

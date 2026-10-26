@@ -51,17 +51,37 @@ export default function HabitMatrixView() {
     WEEKS.push({ label: `Week ${weekNum}`, days: weekDays });
   }
 
-  // EXCLUSIVELY display habits that are part of a daily routine (filtering out DEEP_WORK, ADMIN, and non-daily tasks)
-  const dailyHabits = tasks.filter(
-    (t) =>
-      t.type === 'HABIT' &&
-      t.habitDetails &&
-      (!t.habitDetails.frequency || t.habitDetails.frequency === 'daily')
+  // Include daily habits and weekly scheduled tasks (filtering out one-off deep work & non-recurring admin items)
+  const scheduledHabits = tasks.filter(
+    (t) => t.type === 'HABIT' && t.habitDetails
   );
+
+  // Helper: check if a specific day of the month is scheduled for this habit
+  const isDayScheduledForHabit = (habit: (typeof scheduledHabits)[0], day: number): boolean => {
+    if (!habit.habitDetails) return true;
+    const freq = habit.habitDetails.frequency || 'daily';
+    if (freq === 'daily') return true;
+
+    const dayDate = new Date(currentYear, currentMonthIndex, day);
+    const dayOfWeek = dayDate.getDay(); // 0 for Sunday, 6 for Saturday
+
+    if (freq === 'weekdays') {
+      return dayOfWeek >= 1 && dayOfWeek <= 5;
+    }
+    if (freq === 'weekends') {
+      return dayOfWeek === 0 || dayOfWeek === 6;
+    }
+    if (freq === 'custom') {
+      const customDays = habit.habitDetails.customDays;
+      if (!customDays || customDays.length === 0) return true;
+      return customDays.includes(dayOfWeek);
+    }
+    return true;
+  };
 
   // Helper: Get habit start day in the active month
   // Tracking begins exactly from creation date (prior days do not register as missed)
-  const getHabitStartDay = (habit: (typeof dailyHabits)[0]): number => {
+  const getHabitStartDay = (habit: (typeof scheduledHabits)[0]): number => {
     if (!habit.createdAt) return 1;
     const created = new Date(habit.createdAt);
     if (isNaN(created.getTime())) return 1;
@@ -79,7 +99,7 @@ export default function HabitMatrixView() {
   };
 
   // Helper: check if a habit was completed on a specific day
-  const isHabitCompletedOnDay = (habit: (typeof dailyHabits)[0], day: number) => {
+  const isHabitCompletedOnDay = (habit: (typeof scheduledHabits)[0], day: number) => {
     const dateStr = `${MONTH_YEAR}-${String(day).padStart(2, '0')}`;
     if (day === ACTIVE_DAY) {
       return Boolean(
@@ -94,23 +114,42 @@ export default function HabitMatrixView() {
     );
   };
 
+  // Scheduled count for a habit across its valid tracking days
+  const getHabitScheduledDaysCount = (habit: (typeof scheduledHabits)[0]) => {
+    const startDay = getHabitStartDay(habit);
+    return DAYS_ARRAY.filter((day) => day >= startDay && isDayScheduledForHabit(habit, day)).length;
+  };
+
   // Completed count for a habit across its valid tracking days
-  const getHabitCompletedCount = (habit: (typeof dailyHabits)[0]) => {
+  const getHabitCompletedCount = (habit: (typeof scheduledHabits)[0]) => {
     const startDay = getHabitStartDay(habit);
     return DAYS_ARRAY.filter((day) => day >= startDay && isHabitCompletedOnDay(habit, day)).length;
   };
 
   // 4-SEGMENT AGGREGATE CALCULATIONS
   // Completed, Missed, Pending, and Upcoming
+  // Non-scheduled days are NOT counted as missed/skipped
   let totalCompleted = 0;
   let totalMissed = 0;
   let totalPending = 0;
   let totalUpcoming = 0;
 
-  dailyHabits.forEach((habit) => {
+  scheduledHabits.forEach((habit) => {
     const startDay = getHabitStartDay(habit);
     for (let d = startDay; d <= DAYS_IN_MONTH; d++) {
+      const isScheduled = isDayScheduledForHabit(habit, d);
       const isDone = isHabitCompletedOnDay(habit, d);
+
+      if (!isScheduled) {
+        // Non-scheduled day: if completed, count as completed bonus;
+        // but if NOT completed, do not count as missed or skipped!
+        if (isDone) {
+          totalCompleted += 1;
+        }
+        continue;
+      }
+
+      // Scheduled day
       if (d < ACTIVE_DAY) {
         if (isDone) {
           totalCompleted += 1;
@@ -124,7 +163,7 @@ export default function HabitMatrixView() {
           totalPending += 1;
         }
       } else {
-        // d > ACTIVE_DAY (future day)
+        // d > ACTIVE_DAY (future scheduled day)
         totalUpcoming += 1;
       }
     }
@@ -137,32 +176,34 @@ export default function HabitMatrixView() {
   const pendingPct = totalTrackedChecks > 0 ? (totalPending / totalTrackedChecks) * 100 : 0;
   const upcomingPct = totalTrackedChecks > 0 ? (totalUpcoming / totalTrackedChecks) * 100 : 0;
 
-  // Today's dashboard completion stats
-  const todayActiveHabits = dailyHabits.filter((h) => getHabitStartDay(h) <= ACTIVE_DAY);
+  // Today's dashboard completion stats (strictly for scheduled habits today)
+  const todayActiveHabits = scheduledHabits.filter(
+    (h) => getHabitStartDay(h) <= ACTIVE_DAY && isDayScheduledForHabit(h, ACTIVE_DAY)
+  );
   const todayCompletedCount = todayActiveHabits.filter((h) => isHabitCompletedOnDay(h, ACTIVE_DAY)).length;
   const todayPendingCount = todayActiveHabits.filter((h) => !isHabitCompletedOnDay(h, ACTIVE_DAY)).length;
 
   // Best habit by execution rate from creation date
-  const sortedByRate = [...dailyHabits].sort((a, b) => {
-    const startA = getHabitStartDay(a);
-    const trackedA = Math.max(1, DAYS_IN_MONTH - startA + 1);
-    const rateA = getHabitCompletedCount(a) / trackedA;
+  const sortedByRate = [...scheduledHabits].sort((a, b) => {
+    const scheduledA = Math.max(1, getHabitScheduledDaysCount(a));
+    const rateA = getHabitCompletedCount(a) / scheduledA;
 
-    const startB = getHabitStartDay(b);
-    const trackedB = Math.max(1, DAYS_IN_MONTH - startB + 1);
-    const rateB = getHabitCompletedCount(b) / trackedB;
+    const scheduledB = Math.max(1, getHabitScheduledDaysCount(b));
+    const rateB = getHabitCompletedCount(b) / scheduledB;
 
     return rateB - rateA;
   });
 
-  const bestStreak = dailyHabits.reduce((max, h) => Math.max(max, h.habitDetails?.streakCount || 0), 0);
+  const bestStreak = scheduledHabits.reduce((max, h) => Math.max(max, h.habitDetails?.streakCount || 0), 0);
   const topHabit = sortedByRate[0];
 
-  // Daily Consistency Trend across active habits on each day
+  // Daily Consistency Trend across active scheduled habits on each day
   const dailyStats = DAYS_ARRAY.map((day) => {
-    const activeOnDay = dailyHabits.filter((h) => getHabitStartDay(h) <= day);
-    const completedCount = activeOnDay.filter((h) => isHabitCompletedOnDay(h, day)).length;
-    const totalHabits = activeOnDay.length;
+    const activeScheduledOnDay = scheduledHabits.filter(
+      (h) => getHabitStartDay(h) <= day && isDayScheduledForHabit(h, day)
+    );
+    const completedCount = activeScheduledOnDay.filter((h) => isHabitCompletedOnDay(h, day)).length;
+    const totalHabits = activeScheduledOnDay.length;
     const percentage = totalHabits > 0 && day <= ACTIVE_DAY ? Math.round((completedCount / totalHabits) * 100) : 0;
     return {
       day,
@@ -178,10 +219,10 @@ export default function HabitMatrixView() {
     let completedInWeek = 0;
     let totalSlotsInWeek = 0;
 
-    dailyHabits.forEach((h) => {
+    scheduledHabits.forEach((h) => {
       const startDay = getHabitStartDay(h);
       w.days.forEach((day) => {
-        if (day >= startDay) {
+        if (day >= startDay && isDayScheduledForHabit(h, day)) {
           totalSlotsInWeek += 1;
           if (isHabitCompletedOnDay(h, day)) {
             completedInWeek += 1;
@@ -252,11 +293,11 @@ export default function HabitMatrixView() {
             </span>
             <span className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-surface-2 text-txt-2 border border-border-light font-medium">
               <Lock className="w-3 h-3 text-txt-3" />
-              Daily Routines · Synced from Dashboard
+              Daily &amp; Weekly Routines · Synced
             </span>
           </div>
           <p className="text-xs text-txt-2 mt-1">
-            Real-time 4-segment execution breakdown, daily consistency curve, and 31-day tracking matrix.
+            Real-time 4-segment execution breakdown, daily consistency curve, and 31-day tracking matrix with weekly schedule awareness.
           </p>
         </div>
 
@@ -303,7 +344,7 @@ export default function HabitMatrixView() {
               </span>
               <div>
                 <h3 className="text-sm font-semibold text-txt">Daily Consistency Trend</h3>
-                <p className="text-[11px] text-txt-3">Daily completion percentage across 31 days (updates with dashboard)</p>
+                <p className="text-[11px] text-txt-3">Daily completion percentage across scheduled habits (updates with dashboard)</p>
               </div>
             </div>
 
@@ -429,11 +470,11 @@ export default function HabitMatrixView() {
               </span>
               <div>
                 <h3 className="text-sm font-semibold text-txt">Habit Metrics</h3>
-                <p className="text-[11px] text-txt-3">Monthly daily routine execution &amp; forecast</p>
+                <p className="text-[11px] text-txt-3">Daily &amp; weekly routine execution &amp; forecast</p>
               </div>
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium whitespace-nowrap">
-              {dailyHabits.length} Daily Habits
+              {scheduledHabits.length} Habits Tracked
             </span>
           </div>
 
@@ -637,7 +678,7 @@ export default function HabitMatrixView() {
               </div>
               <div className="mt-1 flex items-baseline justify-between text-[11px]">
                 <span className="text-txt font-semibold">{totalMissed}</span>
-                <span className="text-[10px] text-txt-3">checks</span>
+                <span className="text-[10px] text-txt-3">scheduled</span>
               </div>
             </div>
 
@@ -687,14 +728,14 @@ export default function HabitMatrixView() {
               </div>
               <div className="mt-1 flex items-baseline justify-between text-[11px]">
                 <span className="text-txt font-semibold">{totalUpcoming}</span>
-                <span className="text-[10px] text-txt-3">future days</span>
+                <span className="text-[10px] text-txt-3">scheduled days</span>
               </div>
             </div>
           </div>
 
           {/* Creation date rule footnote */}
           <p className="text-[10px] text-txt-3 leading-tight pt-2 border-t border-border-light text-center">
-            Tracking starts from item creation date (prior days not missed) · Daily habits only
+            Tracking starts on creation date · Non-scheduled days disabled (not counted as missed) · Deep work &amp; admin excluded
           </p>
         </div>
       </div>
@@ -736,24 +777,24 @@ export default function HabitMatrixView() {
           <h3 className="text-xs font-semibold uppercase tracking-wider text-txt-2">
             Top Consistency Leaderboard
           </h3>
-          <span className="text-xs text-txt-3">Ranked by execution rate since creation</span>
+          <span className="text-xs text-txt-3">Ranked by execution rate across scheduled days</span>
         </div>
 
-        {dailyHabits.length === 0 ? (
+        {scheduledHabits.length === 0 ? (
           <div className="p-6 rounded-xl bg-surface border border-border-light text-center space-y-1">
-            <p className="text-xs font-medium text-txt">No daily habits created yet</p>
+            <p className="text-xs font-medium text-txt">No habits created yet</p>
             <p className="text-[11px] text-txt-3">
-              Add daily routine habits in Manage Tasks to view your consistency rankings here.
+              Add daily or weekly scheduled habits in Manage Tasks to view your consistency rankings here.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sortedByRate.slice(0, 6).map((habit, idx) => {
-              const startDay = getHabitStartDay(habit);
-              const trackedDays = Math.max(1, DAYS_IN_MONTH - startDay + 1);
+              const scheduledDays = Math.max(1, getHabitScheduledDaysCount(habit));
               const completedCount = getHabitCompletedCount(habit);
-              const rate = Math.round((completedCount / trackedDays) * 100);
+              const rate = Math.round((completedCount / scheduledDays) * 100);
               const streak = habit.habitDetails?.streakCount || 0;
+              const isScheduledToday = isDayScheduledForHabit(habit, ACTIVE_DAY);
               const isDoneToday = isHabitCompletedOnDay(habit, ACTIVE_DAY);
 
               return (
@@ -769,14 +810,16 @@ export default function HabitMatrixView() {
                       <p className="text-xs font-medium text-txt truncate">{habit.title}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[11px] text-txt-3 font-mono">
-                          {completedCount}/{trackedDays} ({rate}%)
+                          {completedCount}/{scheduledDays} ({rate}%)
                         </span>
                         {isDoneToday ? (
                           <span className="text-[10px] text-ok font-medium flex items-center gap-0.5">
                             <Check className="w-2.5 h-2.5" /> Done
                           </span>
-                        ) : (
+                        ) : isScheduledToday ? (
                           <span className="text-[10px] text-warn font-medium">Pending</span>
+                        ) : (
+                          <span className="text-[10px] text-txt-3 font-medium">Off-day</span>
                         )}
                       </div>
                     </div>
@@ -805,11 +848,11 @@ export default function HabitMatrixView() {
               31-Day Habit Tracking Matrix
             </h3>
             <p className="text-xs text-txt-3">
-              Read-only matrix synchronized with your dashboard pending and completed habits.
+              Read-only matrix synchronized with your dashboard. Non-scheduled days appear as disabled.
             </p>
           </div>
 
-          {/* 5-State Legend */}
+          {/* 6-State Legend */}
           <div className="flex items-center gap-3 text-xs text-txt-3 flex-wrap">
             <div className="flex items-center gap-1.5">
               <div className="w-3.5 h-3.5 rounded bg-ok/20 border border-ok/40 flex items-center justify-center">
@@ -821,7 +864,7 @@ export default function HabitMatrixView() {
               <div className="w-3.5 h-3.5 rounded bg-bad/15 border border-bad/30 flex items-center justify-center">
                 <span className="w-1.5 h-1.5 rounded-full bg-bad" />
               </div>
-              <span>Missed</span>
+              <span>Missed (Scheduled)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3.5 h-3.5 rounded bg-warn/15 border border-dashed border-warn" />
@@ -830,6 +873,12 @@ export default function HabitMatrixView() {
             <div className="flex items-center gap-1.5">
               <div className="w-3.5 h-3.5 rounded bg-surface-2/40 border border-border-light" />
               <span>Upcoming</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded bg-surface-2/30 border border-border-light/40 flex items-center justify-center text-[8px] text-txt-3/30 font-bold">
+                ✕
+              </div>
+              <span>Non-Scheduled (Disabled)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-xs text-txt-3/50 font-bold">—</span>
@@ -845,13 +894,13 @@ export default function HabitMatrixView() {
               {/* Week Column Spans */}
               <tr className="bg-surface-2/60 border-b border-border-light text-[11px] text-txt-2">
                 <th className="sticky left-0 z-20 bg-surface-2 px-3 py-2 min-w-[170px]">
-                  Daily Habits ({dailyHabits.length})
+                  Habits ({scheduledHabits.length})
                 </th>
                 <th className="px-2 py-2 text-center border-r border-border-light min-w-[65px]">
                   Today
                 </th>
                 <th className="px-2 py-2 text-center border-r border-border-light min-w-[50px]">
-                  Days
+                  Sched
                 </th>
                 {WEEKS.map((w) => (
                   <th
@@ -876,7 +925,7 @@ export default function HabitMatrixView() {
                   Status
                 </th>
                 <th className="px-1 py-1 text-center border-r border-border-light">
-                  Active
+                  Days
                 </th>
                 {DAYS_ARRAY.map((day) => {
                   const dayDate = new Date(currentYear, currentMonthIndex, day);
@@ -906,7 +955,7 @@ export default function HabitMatrixView() {
             </thead>
 
             <tbody className="divide-y divide-border-light bg-bg text-xs">
-              {dailyHabits.length === 0 ? (
+              {scheduledHabits.length === 0 ? (
                 <tr>
                   <td
                     colSpan={DAYS_IN_MONTH + 4}
@@ -914,21 +963,22 @@ export default function HabitMatrixView() {
                   >
                     <div className="flex flex-col items-center justify-center space-y-1.5">
                       <Flame className="w-6 h-6 text-txt-3 opacity-40 mb-1" />
-                      <p className="text-xs font-medium text-txt">No daily routine habits to display</p>
+                      <p className="text-xs font-medium text-txt">No habits to display</p>
                       <p className="text-[11px] text-txt-3 max-w-sm">
-                        Create habits in Manage Tasks to track your 31-day visual streak matrix. One-off deep work tasks and admin items are excluded.
+                        Create daily or weekly scheduled habits in Manage Tasks to track your 31-day visual matrix.
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                dailyHabits.map((habit) => {
+                scheduledHabits.map((habit) => {
                   const habitId = String(habit._id);
                   const startDay = getHabitStartDay(habit);
-                  const trackedDays = Math.max(1, DAYS_IN_MONTH - startDay + 1);
+                  const scheduledDays = Math.max(1, getHabitScheduledDaysCount(habit));
                   const completedCount = getHabitCompletedCount(habit);
-                  const rate = Math.round((completedCount / trackedDays) * 100);
+                  const rate = Math.round((completedCount / scheduledDays) * 100);
                   const streak = habit.habitDetails?.streakCount || 0;
+                  const isScheduledToday = isDayScheduledForHabit(habit, ACTIVE_DAY);
                   const isDoneToday = isHabitCompletedOnDay(habit, ACTIVE_DAY);
 
                   return (
@@ -955,16 +1005,20 @@ export default function HabitMatrixView() {
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-ok/10 text-ok border border-ok/20">
                             <Check className="w-2.5 h-2.5" /> Done
                           </span>
-                        ) : (
+                        ) : isScheduledToday ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-warn/10 text-warn border border-warn/20">
                             Pending
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-2 text-txt-3 border border-border-light">
+                            Off-day
                           </span>
                         )}
                       </td>
 
-                      {/* Active Days Column */}
+                      {/* Scheduled Days Count Column */}
                       <td className="px-2 py-2.5 text-center font-mono text-[11px] text-txt-3 border-r border-border-light">
-                        {trackedDays}d
+                        {scheduledDays}d
                       </td>
 
                       {/* 31 Day Read-Only Matrix Cells */}
@@ -972,10 +1026,32 @@ export default function HabitMatrixView() {
                         const dayDate = new Date(currentYear, currentMonthIndex, day);
                         const isWeekEnd = dayDate.getDay() === 0 || dayDate.getDay() === 6;
                         const isPrior = day < startDay;
+                        const isScheduled = isDayScheduledForHabit(habit, day);
                         const isCompleted = isHabitCompletedOnDay(habit, day);
                         const isToday = day === ACTIVE_DAY;
                         const isFuture = day > ACTIVE_DAY;
-                        const isMissed = !isPrior && !isToday && !isFuture && !isCompleted;
+                        const isMissed = !isPrior && isScheduled && !isToday && !isFuture && !isCompleted;
+
+                        // Non-scheduled days appear as disabled rather than being counted as skipped!
+                        if (!isPrior && !isScheduled && !isCompleted) {
+                          return (
+                            <td
+                              key={day}
+                              className={`p-0.5 text-center align-middle ${
+                                isToday ? 'bg-accent/5' : ''
+                              } ${
+                                isWeekEnd ? 'border-r border-border-light' : ''
+                              }`}
+                            >
+                              <div
+                                className="w-5 h-5 rounded-md mx-auto flex items-center justify-center bg-surface-2/30 border border-border-light/30 text-txt-3/20 opacity-35 cursor-not-allowed select-none"
+                                title={`Day ${day} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayDate.getDay()]}): Non-scheduled day (Off-day)`}
+                              >
+                                <span className="font-mono text-[8px] text-txt-3/30 select-none">✕</span>
+                              </div>
+                            </td>
+                          );
+                        }
 
                         return (
                           <td
@@ -1004,10 +1080,10 @@ export default function HabitMatrixView() {
                                   : isToday
                                   ? `Day ${day} (Today): ${isCompleted ? 'Done on Dashboard' : 'Pending on Dashboard'}`
                                   : isCompleted
-                                  ? `Day ${day}: Completed`
+                                  ? `Day ${day}: Completed${!isScheduled ? ' (Bonus day)' : ''}`
                                   : isMissed
-                                  ? `Day ${day}: Missed`
-                                  : `Day ${day}: Upcoming`
+                                  ? `Day ${day}: Missed (Scheduled day)`
+                                  : `Day ${day}: Upcoming scheduled day`
                               }
                             >
                               {isPrior ? (
@@ -1028,7 +1104,7 @@ export default function HabitMatrixView() {
                           <div className="flex items-center justify-between text-[11px]">
                             <span className="font-semibold text-txt font-mono">{rate}%</span>
                             <span className="text-[10px] text-txt-3 font-mono">
-                              {completedCount}/{trackedDays}
+                              {completedCount}/{scheduledDays}
                             </span>
                           </div>
                           <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">

@@ -10,7 +10,17 @@ import {
   addAdminTask,
 } from '@/lib/features/tasks/tasksSlice';
 import { TaskType, TaskImportance, HabitFrequency, AdminRecurringCycle } from '@/types/database';
-import { X, Calendar, Clock, Flame } from 'lucide-react';
+import { X, Calendar, Clock, Flame, Link as LinkIcon } from 'lucide-react';
+
+const WEEK_DAYS = [
+  { day: 0, label: 'Sun', short: 'S' },
+  { day: 1, label: 'Mon', short: 'M' },
+  { day: 2, label: 'Tue', short: 'T' },
+  { day: 3, label: 'Wed', short: 'W' },
+  { day: 4, label: 'Thu', short: 'T' },
+  { day: 5, label: 'Fri', short: 'F' },
+  { day: 6, label: 'Sat', short: 'S' },
+];
 
 interface NewTaskModalProps {
   isOpen: boolean;
@@ -24,6 +34,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   const [type, setType] = useState<TaskType>('DEEP_WORK');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [url, setUrl] = useState('');
   const [importance, setImportance] = useState<TaskImportance>(3);
   const [isFrog, setIsFrog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,8 +42,8 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   // Deep work fields
   const [targetMinutes, setTargetMinutes] = useState(45);
 
-  // Habit fields
-  const [habitFrequency, setHabitFrequency] = useState<HabitFrequency>('daily');
+  // Habit & weekly recurrence fields
+  const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]); // default all 7 days
   const [nextTaskId, setNextTaskId] = useState<string>('');
 
   // Admin fields
@@ -43,6 +54,16 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   if (!isOpen) return null;
+
+  const toggleDay = (d: number) => {
+    if (selectedDays.includes(d)) {
+      if (selectedDays.length > 1) {
+        setSelectedDays(selectedDays.filter((x) => x !== d));
+      }
+    } else {
+      setSelectedDays([...selectedDays, d].sort((a, b) => a - b));
+    }
+  };
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
@@ -57,9 +78,11 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   const resetForm = () => {
     setTitle('');
     setDescription('');
+    setUrl('');
     setImportance(3);
     setIsFrog(false);
     setTargetMinutes(45);
+    setSelectedDays([0, 1, 2, 3, 4, 5, 6]);
     setNextTaskId('');
     setSubtasks([]);
     setNewSubtaskTitle('');
@@ -71,11 +94,15 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   };
 
   const dispatchFallback = () => {
+    const isAllDays = selectedDays.length === 7;
+    const computedFreq: HabitFrequency = isAllDays ? 'daily' : 'custom';
+
     if (type === 'DEEP_WORK') {
       dispatch(
         addDeepWorkTask({
           title: title.trim(),
           description: description.trim() || undefined,
+          url: url.trim() || undefined,
           targetDurationMinutes: targetMinutes,
           importance,
           isFrog,
@@ -86,7 +113,9 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
         addHabitTask({
           title: title.trim(),
           description: description.trim() || undefined,
-          frequency: habitFrequency,
+          url: url.trim() || undefined,
+          frequency: computedFreq,
+          customDays: selectedDays,
           importance,
           nextTaskId: nextTaskId || undefined,
         })
@@ -96,6 +125,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
         addAdminTask({
           title: title.trim(),
           description: description.trim() || undefined,
+          url: url.trim() || undefined,
           dueDate,
           isRecurring,
           recurringCycle: isRecurring ? recurringCycle : 'none',
@@ -112,9 +142,13 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
 
     setIsSubmitting(true);
 
+    const isAllDays = selectedDays.length === 7;
+    const computedFreq: HabitFrequency = isAllDays ? 'daily' : 'custom';
+
     const taskPayload: Record<string, unknown> = {
       title: title.trim(),
       description: description.trim() || undefined,
+      url: url.trim() || undefined,
       type,
       importance,
       isFrog: type === 'DEEP_WORK' ? isFrog : false,
@@ -131,11 +165,11 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
       };
     } else if (type === 'HABIT') {
       taskPayload.habitDetails = {
-        frequency: habitFrequency,
-        customDays: [],
+        frequency: computedFreq,
+        customDays: selectedDays,
         streakCount: 0,
         bestStreak: 0,
-        monthlyGoal: 31,
+        monthlyGoal: isAllDays ? 31 : Math.round((selectedDays.length / 7) * 31),
         nextTaskId: nextTaskId || undefined,
       };
     } else if (type === 'ADMIN') {
@@ -252,6 +286,22 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
               />
             </div>
 
+            {/* Optional Resource Link */}
+            <div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-txt-3">
+                  <LinkIcon className="w-3.5 h-3.5" />
+                </div>
+                <input
+                  type="url"
+                  placeholder="Optional resource URL (e.g. https://leetcode.com, docs link)..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-bg border border-border text-xs text-txt placeholder-txt-3 focus:outline-hidden focus:border-accent"
+                />
+              </div>
+            </div>
+
             {/* Importance Rating & Eat That Frog */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -303,19 +353,76 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
 
             {type === 'HABIT' && (
               <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-medium uppercase text-txt-2 mb-1">
-                    Frequency
-                  </label>
-                  <select
-                    value={habitFrequency}
-                    onChange={(e) => setHabitFrequency(e.target.value as HabitFrequency)}
-                    className="w-full px-2.5 py-2 rounded-xl bg-bg border border-border text-xs text-txt focus:outline-hidden focus:border-accent"
-                  >
-                    <option value="daily">Daily</option>
-                    <option value="weekdays">Weekdays (Mon-Fri)</option>
-                    <option value="weekends">Weekends (Sat-Sun)</option>
-                  </select>
+                {/* Weekly Recurrence Day Selector with full flexibility */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-medium uppercase text-txt-2">
+                      Weekly Recurrence ({selectedDays.length}/7 days)
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDays([0, 1, 2, 3, 4, 5, 6])}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                          selectedDays.length === 7
+                            ? 'bg-accent/15 text-accent font-semibold'
+                            : 'text-txt-3 hover:text-txt'
+                        }`}
+                      >
+                        Every day
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDays([1, 2, 3, 4, 5])}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                          selectedDays.length === 5 && !selectedDays.includes(0) && !selectedDays.includes(6)
+                            ? 'bg-accent/15 text-accent font-semibold'
+                            : 'text-txt-3 hover:text-txt'
+                        }`}
+                      >
+                        Weekdays
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDays([0, 6])}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
+                          selectedDays.length === 2 && selectedDays.includes(0) && selectedDays.includes(6)
+                            ? 'bg-accent/15 text-accent font-semibold'
+                            : 'text-txt-3 hover:text-txt'
+                        }`}
+                      >
+                        Weekends
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 7 Interactive Day Buttons without restriction */}
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {WEEK_DAYS.map((wd) => {
+                      const isSelected = selectedDays.includes(wd.day);
+                      return (
+                        <button
+                          key={wd.day}
+                          type="button"
+                          onClick={() => toggleDay(wd.day)}
+                          className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-xs transition cursor-pointer select-none ${
+                            isSelected
+                              ? 'bg-accent text-white font-semibold shadow-xs'
+                              : 'bg-surface-2 text-txt-3 hover:text-txt hover:bg-border-light border border-border-light'
+                          }`}
+                          title={`Toggle ${wd.label}`}
+                        >
+                          <span className="text-[10px] opacity-75">{wd.short}</span>
+                          <span className="text-[11px] font-medium">{wd.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-txt-3">
+                    {selectedDays.length === 7
+                      ? 'Scheduled every day (Daily Routine)'
+                      : `Scheduled on: ${selectedDays.map((d) => WEEK_DAYS[d].label).join(', ')}`}
+                  </p>
                 </div>
 
                 <div>

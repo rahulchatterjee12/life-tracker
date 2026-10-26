@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Circle,
   Link as LinkIcon,
+  ExternalLink,
   Award,
 } from 'lucide-react';
 
@@ -153,6 +154,22 @@ export default function TaskDetailModal({
               <p className="text-xs text-txt-3 italic">
                 No extra notes attached to this task.
               </p>
+            )}
+
+            {/* Clickable Resource Link Button */}
+            {task.url && (
+              <div className="pt-1">
+                <a
+                  href={task.url.startsWith('http://') || task.url.startsWith('https://') ? task.url : `https://${task.url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/25 text-accent text-xs font-semibold transition cursor-pointer group shadow-2xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  <span className="truncate max-w-[280px] sm:max-w-md">Open Resource: {task.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+                  <span className="text-[10px] opacity-75 shrink-0">↗</span>
+                </a>
+              </div>
             )}
           </div>
 

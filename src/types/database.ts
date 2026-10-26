@@ -110,6 +110,7 @@ export interface ITask {
   userId: Types.ObjectId | string;
   title: string;
   description?: string;
+  url?: string;
   type: TaskType;
   importance: TaskImportance;
   isFrog: boolean; // Eat That Frog flag

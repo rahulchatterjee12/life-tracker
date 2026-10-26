@@ -69,6 +69,7 @@ export const tasksSlice = createSlice({
       action: PayloadAction<{
         title: string;
         description?: string;
+        url?: string;
         targetDurationMinutes: number;
         importance?: TaskImportance;
         isFrog?: boolean;
@@ -80,6 +81,7 @@ export const tasksSlice = createSlice({
         userId: 'user-default',
         title: action.payload.title,
         description: action.payload.description,
+        url: action.payload.url,
         type: 'DEEP_WORK',
         importance: action.payload.importance || 3,
         isFrog: !!action.payload.isFrog,
@@ -110,6 +112,7 @@ export const tasksSlice = createSlice({
       action: PayloadAction<{
         title: string;
         description?: string;
+        url?: string;
         frequency: HabitFrequency;
         customDays?: number[];
         importance?: TaskImportance;
@@ -121,6 +124,7 @@ export const tasksSlice = createSlice({
         userId: 'user-default',
         title: action.payload.title,
         description: action.payload.description,
+        url: action.payload.url,
         type: 'HABIT',
         importance: action.payload.importance || 3,
         isFrog: false,
@@ -144,6 +148,7 @@ export const tasksSlice = createSlice({
       action: PayloadAction<{
         title: string;
         description?: string;
+        url?: string;
         dueDate: string;
         isRecurring?: boolean;
         recurringCycle?: AdminRecurringCycle;
@@ -164,6 +169,7 @@ export const tasksSlice = createSlice({
         userId: 'user-default',
         title: action.payload.title,
         description: action.payload.description,
+        url: action.payload.url,
         type: 'ADMIN',
         importance: action.payload.importance || 3,
         isFrog: false,
@@ -353,11 +359,13 @@ export const tasksSlice = createSlice({
         id: string;
         title: string;
         description?: string;
+        url?: string;
         importance?: TaskImportance;
         isFrog?: boolean;
         type?: TaskType;
         habitDetails?: {
           frequency?: HabitFrequency;
+          customDays?: number[];
           monthlyGoal?: number;
           streakCount?: number;
           bestStreak?: number;
@@ -378,6 +386,9 @@ export const tasksSlice = createSlice({
 
       task.title = action.payload.title;
       task.description = action.payload.description;
+      if (action.payload.url !== undefined) {
+        task.url = action.payload.url;
+      }
       if (action.payload.importance !== undefined) {
         task.importance = action.payload.importance;
       }
@@ -395,6 +406,9 @@ export const tasksSlice = createSlice({
       if (action.payload.habitDetails && task.habitDetails) {
         if (action.payload.habitDetails.frequency) {
           task.habitDetails.frequency = action.payload.habitDetails.frequency;
+        }
+        if (action.payload.habitDetails.customDays !== undefined) {
+          task.habitDetails.customDays = action.payload.habitDetails.customDays;
         }
         if (action.payload.habitDetails.monthlyGoal !== undefined) {
           task.habitDetails.monthlyGoal = action.payload.habitDetails.monthlyGoal;
