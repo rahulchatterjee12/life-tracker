@@ -563,6 +563,62 @@ export const tasksSlice = createSlice({
       }
     },
 
+    setTaskCompletionStatus: (
+      state,
+      action: PayloadAction<{ taskId: string; completed: boolean }>
+    ) => {
+      const { taskId, completed } = action.payload;
+      const task = state.items.find((t) => String(t._id) === taskId);
+      if (!task) return;
+
+      if (task.type === 'HABIT' && task.habitDetails) {
+        if (task.completed === completed) return;
+        task.completed = completed;
+        const activeDateStr = '2026-03-27';
+        const dates = task.habitDetails.completedDates || [];
+        if (completed) {
+          task.completedAt = new Date();
+          task.habitDetails.streakCount += 1;
+          if (task.habitDetails.streakCount > task.habitDetails.bestStreak) {
+            task.habitDetails.bestStreak = task.habitDetails.streakCount;
+          }
+          task.habitDetails.lastCompletedDate = activeDateStr;
+          if (!dates.includes(activeDateStr)) {
+            task.habitDetails.completedDates = [...dates, activeDateStr];
+          }
+
+          if (task.habitDetails.nextTaskId) {
+            const nextTask = state.items.find(
+              (t) => String(t._id) === String(task.habitDetails?.nextTaskId)
+            );
+            state.activeHabitStackModal = {
+              isOpen: true,
+              completedHabitTitle: task.title,
+              nextTaskId: String(task.habitDetails.nextTaskId),
+              nextTaskTitle: nextTask?.title || 'Next Stacked Task',
+            };
+          }
+        } else {
+          task.completedAt = undefined;
+          task.habitDetails.streakCount = Math.max(0, task.habitDetails.streakCount - 1);
+          task.habitDetails.completedDates = dates.filter((d) => d !== activeDateStr);
+        }
+      } else if (task.type === 'DEEP_WORK') {
+        task.completed = completed;
+        task.completedAt = completed ? new Date() : undefined;
+        if (completed && task.deepWorkDetails) {
+          const targetSecs = (task.deepWorkDetails.targetDurationMinutes || 45) * 60;
+          if (!task.deepWorkDetails.actualDurationSeconds) {
+            task.deepWorkDetails.actualDurationSeconds = targetSecs;
+          }
+          task.pointsAwarded = task.pointsAwarded || 50;
+        }
+      } else if (task.type === 'ADMIN') {
+        task.completed = completed;
+        task.completedAt = completed ? new Date() : undefined;
+      }
+    },
+
     setDailyFrog: (state, action: PayloadAction<string>) => {
       state.items.forEach((t) => {
         t.isFrog = String(t._id) === action.payload;
@@ -695,6 +751,7 @@ export const {
   completeDeepWorkTask,
   toggleAdminSubtask,
   toggleAdminTaskCompletion,
+  setTaskCompletionStatus,
   setDailyFrog,
   deleteTask,
   updateTask,

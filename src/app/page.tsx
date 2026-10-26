@@ -4,9 +4,6 @@ import { useTheme } from '@/components/providers/ThemeProvider';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import {
-  toggleHabitCompletion,
-  toggleAdminSubtask,
-  toggleAdminTaskCompletion,
   setSelectedCategory,
 } from '@/lib/features/tasks/tasksSlice';
 import { startTimer } from '@/lib/features/timer/timerSlice';
@@ -15,6 +12,7 @@ import ZenMode from '@/components/timer/ZenMode';
 import HybridTimerWidget from '@/components/timer/HybridTimerWidget';
 import HabitStackModal from '@/components/tasks/HabitStackModal';
 import TaskManagerView from '@/components/tasks/TaskManagerView';
+import TaskDetailModal from '@/components/tasks/TaskDetailModal';
 import RetrospectiveModal from '@/components/retrospective/RetrospectiveModal';
 import AuthModal from '@/components/auth/AuthModal';
 import HabitMatrixView from '@/components/analytics/HabitMatrixView';
@@ -24,15 +22,13 @@ import {
   Calendar,
   Clock,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Bot,
   Sun,
   Moon,
   LayoutDashboard,
   Wallet,
   CheckCircle2,
-  Circle,
   Snowflake,
   Play,
   Menu,
@@ -56,8 +52,10 @@ export default function Home() {
   const [isRetroModalOpen, setIsRetroModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
-  const [expandedAdminTaskId, setExpandedAdminTaskId] = useState<string | null>(null);
+  const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const selectedDetailTask = tasks.items.find((t) => String(t._id) === selectedDetailTaskId) || null;
 
   const handleBuyFreeze = async () => {
     dispatch(purchaseStreakFreeze());
@@ -102,6 +100,11 @@ export default function Home() {
       <ZenMode />
       <HabitStackModal />
       <RetrospectiveModal isOpen={isRetroModalOpen} onClose={() => setIsRetroModalOpen(false)} />
+      <TaskDetailModal
+        isOpen={Boolean(selectedDetailTask)}
+        onClose={() => setSelectedDetailTaskId(null)}
+        task={selectedDetailTask}
+      />
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -375,12 +378,12 @@ export default function Home() {
                         <span>Focus</span>
                       </button>
                     )}
-                    {dailyFrog.type === 'HABIT' && (
+                    {(dailyFrog.type === 'HABIT' || dailyFrog.type === 'ADMIN') && (
                       <button
-                        onClick={() => dispatch(toggleHabitCompletion(String(dailyFrog._id)))}
-                        className="text-txt-2 hover:text-ok cursor-pointer"
+                        onClick={() => setSelectedDetailTaskId(String(dailyFrog._id))}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 border border-border-light text-txt text-xs font-medium transition cursor-pointer"
                       >
-                        <Circle className="w-5 h-5" />
+                        <span>Swipe to Complete →</span>
                       </button>
                     )}
                   </div>
@@ -421,94 +424,101 @@ export default function Home() {
                     </div>
                   ) : (
                     filteredTasks.map((task) => (
-                      <div key={String(task._id)} className={`group px-4 py-3 transition-colors hover:bg-surface-2/50 ${task.completed ? 'opacity-50' : ''}`}>
-                        <div className="flex items-center gap-3">
-                          {/* Action */}
-                          {task.type === 'HABIT' && (
-                            <button
-                              onClick={() => dispatch(toggleHabitCompletion(String(task._id)))}
-                              className="shrink-0 text-txt-3 hover:text-ok cursor-pointer"
-                            >
-                              {task.completed ? <CheckCircle2 className="w-5 h-5 text-ok" /> : <Circle className="w-5 h-5" />}
-                            </button>
-                          )}
-                          {task.type === 'ADMIN' && (
-                            <button
-                              onClick={() => dispatch(toggleAdminTaskCompletion(String(task._id)))}
-                              className="shrink-0 text-txt-3 hover:text-ok cursor-pointer"
-                            >
-                              {task.completed ? <CheckCircle2 className="w-5 h-5 text-ok" /> : <Circle className="w-5 h-5" />}
-                            </button>
-                          )}
-                          {task.type === 'DEEP_WORK' && (
-                            <button
-                              disabled={task.completed}
-                              onClick={() => dispatch(startTimer({
-                                taskId: String(task._id),
-                                taskTitle: task.title,
-                                targetDurationMinutes: task.deepWorkDetails?.targetDurationMinutes || 45,
-                                openZenMode: true,
-                              }))}
-                              className="shrink-0 w-5 h-5 rounded-full bg-accent/10 hover:bg-accent/20 text-accent flex items-center justify-center text-[9px] transition cursor-pointer disabled:opacity-30"
-                            >
-                              ▶
-                            </button>
-                          )}
+                      <div
+                        key={String(task._id)}
+                        onClick={() => setSelectedDetailTaskId(String(task._id))}
+                        className={`group px-4 py-3.5 transition-all hover:bg-surface-2/60 cursor-pointer flex items-center justify-between gap-3 ${
+                          task.completed ? 'opacity-60 bg-surface/30' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Category Icon Badge */}
+                          <div
+                            className={`p-2 rounded-xl shrink-0 transition-colors ${
+                              task.type === 'HABIT'
+                                ? 'bg-warn/10 text-warn group-hover:bg-warn/15'
+                                : task.type === 'DEEP_WORK'
+                                ? 'bg-accent/10 text-accent group-hover:bg-accent/15'
+                                : 'bg-surface-2 text-txt-2'
+                            }`}
+                          >
+                            {task.type === 'HABIT' && <Flame className="w-4 h-4" />}
+                            {task.type === 'DEEP_WORK' && <Clock className="w-4 h-4" />}
+                            {task.type === 'ADMIN' && <Calendar className="w-4 h-4" />}
+                          </div>
 
                           {/* Content */}
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`text-sm ${task.completed ? 'line-through text-txt-3' : 'text-txt'}`}>
+                              <span
+                                className={`text-sm font-medium ${
+                                  task.completed ? 'line-through text-txt-3' : 'text-txt'
+                                }`}
+                              >
                                 {task.title}
                               </span>
-                              {task.isFrog && <span className="text-[10px] px-1.5 py-0.5 rounded bg-warn/10 text-warn font-medium">Frog</span>}
+                              {task.isFrog && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-warn/10 text-warn font-medium flex items-center gap-0.5">
+                                  <Sparkles className="w-2.5 h-2.5" /> Frog
+                                </span>
+                              )}
                             </div>
-                            <div className="flex items-center gap-3 mt-0.5">
-                              <span className="flex items-center gap-1 text-[11px] text-txt-3">
-                                {task.type === 'DEEP_WORK' && <><Clock className="w-3 h-3" /> {task.deepWorkDetails?.targetDurationMinutes}m</>}
-                                {task.type === 'HABIT' && <><Flame className="w-3 h-3" /> {task.habitDetails?.streakCount}d streak</>}
-                                {task.type === 'ADMIN' && (
-                                  <>
-                                    <Calendar className="w-3 h-3" />
-                                    <span suppressHydrationWarning>
-                                      {task.adminDetails ? new Date(task.adminDetails.dueDate).toLocaleDateString() : ''}
-                                    </span>
-                                  </>
+
+                            <div className="flex items-center gap-3 mt-0.5 text-[11px] text-txt-3">
+                              {task.type === 'DEEP_WORK' && (
+                                <>
+                                  <Clock className="w-3 h-3" />
+                                  <span>{task.deepWorkDetails?.targetDurationMinutes}m focus</span>
+                                </>
+                              )}
+                              {task.type === 'HABIT' && (
+                                <>
+                                  <Flame className="w-3 h-3" />
+                                  <span>{task.habitDetails?.streakCount}d streak</span>
+                                </>
+                              )}
+                              {task.type === 'ADMIN' && (
+                                <>
+                                  <Calendar className="w-3 h-3" />
+                                  <span suppressHydrationWarning>
+                                    {task.adminDetails
+                                      ? new Date(task.adminDetails.dueDate).toLocaleDateString()
+                                      : ''}
+                                  </span>
+                                </>
+                              )}
+                              {task.type === 'ADMIN' &&
+                                task.adminDetails?.subtasks &&
+                                task.adminDetails.subtasks.length > 0 && (
+                                  <span>
+                                    {
+                                      task.adminDetails.subtasks.filter((s) => s.completed).length
+                                    }
+                                    /{task.adminDetails.subtasks.length} subtasks
+                                  </span>
                                 )}
-                              </span>
-                              {task.type === 'ADMIN' && task.adminDetails?.subtasks && task.adminDetails.subtasks.length > 0 && (
-                                <button
-                                  onClick={() => setExpandedAdminTaskId(expandedAdminTaskId === String(task._id) ? null : String(task._id))}
-                                  className="flex items-center gap-0.5 text-[11px] text-accent cursor-pointer"
-                                >
-                                  {task.adminDetails.subtasks.filter((s) => s.completed).length}/{task.adminDetails.subtasks.length} subtasks
-                                  {expandedAdminTaskId === String(task._id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                </button>
-                              )}
                               {task.deepWorkDetails?.overtimeBonusAwarded && (
-                                <span className="text-[11px] text-ok font-medium">Overtime ✓</span>
+                                <span className="text-ok font-medium">Overtime ✓</span>
                               )}
-                              <span className="text-[11px] text-txt-3">★ {task.importance}</span>
+                              <span>★ {task.importance}</span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Subtasks */}
-                        {task.type === 'ADMIN' && expandedAdminTaskId === String(task._id) && task.adminDetails?.subtasks && (
-                          <div className="ml-8 mt-2 space-y-1 pt-2 border-t border-border-light">
-                            {task.adminDetails.subtasks.map((sub) => (
-                              <label key={sub.id} className="flex items-center gap-2 text-xs text-txt-2 cursor-pointer select-none hover:text-txt">
-                                <input
-                                  type="checkbox"
-                                  checked={sub.completed}
-                                  onChange={() => dispatch(toggleAdminSubtask({ taskId: String(task._id), subtaskId: sub.id }))}
-                                  className="h-3.5 w-3.5 rounded border-border accent-accent"
-                                />
-                                <span className={sub.completed ? 'line-through text-txt-3' : ''}>{sub.title}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
+                        {/* Right side status / action pill */}
+                        <div className="shrink-0 flex items-center gap-2">
+                          {task.completed ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-ok/10 text-ok border border-ok/20">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Done</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-surface-2 text-txt-2 border border-border-light group-hover:border-accent/40 group-hover:text-accent group-hover:bg-accent/5 transition-all">
+                              <span>Details &amp; Swipe</span>
+                              <ChevronRight className="w-3.5 h-3.5 text-accent" />
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
