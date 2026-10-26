@@ -29,6 +29,7 @@ import {
   LayoutDashboard,
   Wallet,
   CheckCircle2,
+  Circle,
   Snowflake,
   Play,
   Menu,
@@ -53,6 +54,7 @@ export default function Home() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
   const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
+  const [taskStatusTab, setTaskStatusTab] = useState<'pending' | 'completed'>('pending');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const selectedDetailTask = tasks.items.find((t) => String(t._id) === selectedDetailTaskId) || null;
@@ -79,10 +81,15 @@ export default function Home() {
     } catch { /* local state updated */ }
   };
 
-  const filteredTasks = tasks.items.filter((task) => {
+  const categoryTasks = tasks.items.filter((task) => {
     if (tasks.selectedCategory === 'ALL') return true;
     return task.type === tasks.selectedCategory;
   });
+
+  const pendingTasks = categoryTasks.filter((t) => !t.completed);
+  const completedTasks = categoryTasks.filter((t) => t.completed);
+
+  const displayedTasks = taskStatusTab === 'pending' ? pendingTasks : completedTasks;
 
   const dailyFrog = tasks.items.find((t) => t.isFrog && !t.completed);
   const pendingCount = tasks.items.filter((t) => !t.completed).length;
@@ -390,45 +397,136 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Task List */}
+              {/* Task Section: Two-Tab Layout (Pending vs Completed) */}
               <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 bg-surface rounded-xl p-1 border border-border-light">
+                {/* Two-Tab Navigation + Category Filter */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1 border-b border-border-light">
+                  {/* Two Main Tabs: Pending vs Completed */}
+                  <div className="flex items-center p-1 bg-surface rounded-2xl border border-border-light self-start">
+                    <button
+                      type="button"
+                      onClick={() => setTaskStatusTab('pending')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm transition cursor-pointer ${
+                        taskStatusTab === 'pending'
+                          ? 'bg-bg text-txt shadow-xs font-semibold'
+                          : 'text-txt-2 hover:text-txt font-medium'
+                      }`}
+                    >
+                      <Circle className="w-3.5 h-3.5 text-warn" />
+                      <span>Pending Tasks</span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-mono font-semibold transition ${
+                          taskStatusTab === 'pending'
+                            ? 'bg-warn/15 text-warn'
+                            : 'bg-surface-2 text-txt-3'
+                        }`}
+                      >
+                        {pendingCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTaskStatusTab('completed')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm transition cursor-pointer ${
+                        taskStatusTab === 'completed'
+                          ? 'bg-bg text-txt shadow-xs font-semibold'
+                          : 'text-txt-2 hover:text-txt font-medium'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-ok" />
+                      <span>Completed</span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-mono font-semibold transition ${
+                          taskStatusTab === 'completed'
+                            ? 'bg-ok/15 text-ok'
+                            : 'bg-surface-2 text-txt-3'
+                        }`}
+                      >
+                        {completedCount}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Category Pills Filter */}
+                  <div className="flex items-center gap-1 bg-surface rounded-xl p-1 border border-border-light self-start md:self-auto">
                     {(['ALL', 'DEEP_WORK', 'HABIT', 'ADMIN'] as const).map((cat) => (
                       <button
                         key={cat}
                         onClick={() => dispatch(setSelectedCategory(cat))}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                           tasks.selectedCategory === cat
-                            ? 'bg-bg text-txt shadow-sm'
+                            ? 'bg-bg text-txt shadow-xs font-semibold'
                             : 'text-txt-2 hover:text-txt'
                         }`}
                       >
-                        {cat === 'ALL' ? 'All' : cat === 'DEEP_WORK' ? 'Deep Work' : cat === 'HABIT' ? 'Habits' : 'Admin'}
+                        {cat === 'ALL'
+                          ? 'All'
+                          : cat === 'DEEP_WORK'
+                          ? 'Deep Work'
+                          : cat === 'HABIT'
+                          ? 'Habits'
+                          : 'Admin'}
                       </button>
                     ))}
                   </div>
-                  <span className="text-xs text-txt-3">{filteredTasks.length} items</span>
                 </div>
 
+                <div className="flex items-center justify-between text-xs text-txt-3 px-1">
+                  <span>
+                    Showing {displayedTasks.length} {taskStatusTab === 'pending' ? 'pending' : 'completed'} items
+                  </span>
+                </div>
+
+                {/* Task Cards Container */}
                 <div className="rounded-2xl border border-border-light bg-surface overflow-hidden divide-y divide-border-light">
-                  {filteredTasks.length === 0 ? (
-                    <div className="p-12 text-center">
-                      <p className="text-sm text-txt-3">No tasks found for this view</p>
-                      <button
-                        onClick={() => setView('manage')}
-                        className="mt-3 text-xs text-accent hover:underline cursor-pointer"
-                      >
-                        Go to Manage Tasks &amp; Habits →
-                      </button>
+                  {displayedTasks.length === 0 ? (
+                    <div className="p-12 text-center space-y-2">
+                      {taskStatusTab === 'pending' ? (
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-ok/10 text-ok mx-auto flex items-center justify-center">
+                            <CheckCircle2 className="w-5 h-5" />
+                          </div>
+                          <p className="text-sm font-medium text-txt">All caught up!</p>
+                          <p className="text-xs text-txt-3 max-w-sm mx-auto">
+                            No pending tasks for this category. You have crushed your goals!
+                          </p>
+                          {completedCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setTaskStatusTab('completed')}
+                              className="mt-2 text-xs text-accent hover:underline cursor-pointer"
+                            >
+                              View completed tasks ({completedCount}) →
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-surface-2 text-txt-3 mx-auto flex items-center justify-center">
+                            <Circle className="w-5 h-5" />
+                          </div>
+                          <p className="text-sm font-medium text-txt">No completed tasks yet</p>
+                          <p className="text-xs text-txt-3 max-w-sm mx-auto">
+                            Tap any task in the Pending tab and swipe to complete it.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setTaskStatusTab('pending')}
+                            className="mt-2 text-xs text-accent hover:underline cursor-pointer"
+                          >
+                            Go to Pending tasks ({pendingCount}) →
+                          </button>
+                        </>
+                      )}
                     </div>
                   ) : (
-                    filteredTasks.map((task) => (
+                    displayedTasks.map((task) => (
                       <div
                         key={String(task._id)}
                         onClick={() => setSelectedDetailTaskId(String(task._id))}
                         className={`group px-4 py-3.5 transition-all hover:bg-surface-2/60 cursor-pointer flex items-center justify-between gap-3 ${
-                          task.completed ? 'opacity-60 bg-surface/30' : ''
+                          task.completed ? 'opacity-70 bg-surface/30' : ''
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
