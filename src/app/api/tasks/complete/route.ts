@@ -85,7 +85,14 @@ export async function POST(request: Request) {
         if (currentStreak > (task.habitDetails.bestStreak || 0)) {
           task.habitDetails.bestStreak = currentStreak;
         }
-        task.habitDetails.lastCompletedDate = completedAt.toISOString().split('T')[0];
+        const todayStr = completedAt.toISOString().split('T')[0];
+        task.habitDetails.lastCompletedDate = todayStr;
+        if (!task.habitDetails.completedDates) {
+          task.habitDetails.completedDates = [];
+        }
+        if (!task.habitDetails.completedDates.includes(todayStr)) {
+          task.habitDetails.completedDates.push(todayStr);
+        }
       }
     } else if (task.type === 'ADMIN') {
       const totalSubtasks = task.adminDetails?.subtasks?.length || 0;

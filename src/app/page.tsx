@@ -4,10 +4,11 @@ import { useTheme } from '@/components/providers/ThemeProvider';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import {
+  setTasks,
   setSelectedCategory,
 } from '@/lib/features/tasks/tasksSlice';
 import { startTimer } from '@/lib/features/timer/timerSlice';
-import { purchaseStreakFreeze, redeemVaultReward } from '@/lib/features/vault/vaultSlice';
+import { purchaseStreakFreeze, redeemVaultReward, setUserVaultStats } from '@/lib/features/vault/vaultSlice';
 import ZenMode from '@/components/timer/ZenMode';
 import HybridTimerWidget from '@/components/timer/HybridTimerWidget';
 import HabitStackModal from '@/components/tasks/HabitStackModal';
@@ -16,7 +17,7 @@ import TaskDetailModal from '@/components/tasks/TaskDetailModal';
 import RetrospectiveModal from '@/components/retrospective/RetrospectiveModal';
 import AuthModal from '@/components/auth/AuthModal';
 import HabitMatrixView from '@/components/analytics/HabitMatrixView';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Flame,
   Calendar,
@@ -56,6 +57,31 @@ export default function Home() {
   const [selectedDetailTaskId, setSelectedDetailTaskId] = useState<string | null>(null);
   const [taskStatusTab, setTaskStatusTab] = useState<'pending' | 'completed'>('pending');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    async function loadDatabaseTasks() {
+      try {
+        const res = await fetch('/api/tasks');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.tasks)) {
+          dispatch(setTasks(data.tasks));
+          if (data.user) {
+            dispatch(
+              setUserVaultStats({
+                vaultBalance: data.user.vaultBalance ?? 0,
+                totalPointsEarned: data.user.totalPointsEarned ?? 0,
+                streakFreezesCount: data.user.streakFreezesCount ?? 0,
+                badges: data.user.badges ?? [],
+              })
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load tasks from DB:', err);
+      }
+    }
+    loadDatabaseTasks();
+  }, [dispatch, user]);
 
   const selectedDetailTask = tasks.items.find((t) => String(t._id) === selectedDetailTaskId) || null;
 
@@ -481,8 +507,28 @@ export default function Home() {
                 {/* Task Cards Container */}
                 <div className="rounded-2xl border border-border-light bg-surface overflow-hidden divide-y divide-border-light">
                   {displayedTasks.length === 0 ? (
-                    <div className="p-12 text-center space-y-2">
-                      {taskStatusTab === 'pending' ? (
+                    <div className="p-12 text-center space-y-3">
+                      {tasks.items.length === 0 ? (
+                        <>
+                          <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent mx-auto flex items-center justify-center">
+                            <Sparkles className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-txt">No tasks or habits created yet</p>
+                            <p className="text-xs text-txt-3 max-w-sm mx-auto mt-1">
+                              Your workspace is clean. Create habits, deep work blocks, and admin tasks in Manage view to start building your streak.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setView('manage')}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold transition cursor-pointer shadow-sm"
+                          >
+                            <ListTodo className="w-3.5 h-3.5" />
+                            <span>Create Your First Task</span>
+                          </button>
+                        </>
+                      ) : taskStatusTab === 'pending' ? (
                         <>
                           <div className="w-10 h-10 rounded-full bg-ok/10 text-ok mx-auto flex items-center justify-center">
                             <CheckCircle2 className="w-5 h-5" />

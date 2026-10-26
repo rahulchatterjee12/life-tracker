@@ -20,99 +20,19 @@ export interface VaultState {
   error: string | null;
 }
 
-const mockRewards: IVaultReward[] = [
-  {
-    _id: 'rew-1' as unknown as import('mongoose').Types.ObjectId,
-    title: 'Weekend Specialty Coffee Experience',
-    description: 'Treat yourself to a top-tier pour-over brew at your favorite cafe.',
-    pointCost: 200,
-    monetaryValue: 20,
-    currency: 'INR',
-    category: 'LEISURE',
-    icon: '☕',
-    isRedeemed: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    _id: 'rew-2' as unknown as import('mongoose').Types.ObjectId,
-    title: 'New Programming / Focus Book',
-    description: 'Order any educational or self-development Kindle book.',
-    pointCost: 1000,
-    monetaryValue: 100,
-    currency: 'INR',
-    category: 'TECH',
-    icon: '📚',
-    isRedeemed: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    _id: 'rew-3' as unknown as import('mongoose').Types.ObjectId,
-    title: 'Financial Index Fund Investment Deposit',
-    description: 'Transfer real pegged savings into your index fund investment account.',
-    pointCost: 5000,
-    monetaryValue: 500,
-    currency: 'INR',
-    category: 'FINANCIAL',
-    icon: '📈',
-    isRedeemed: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
-
-const mockBadges: IUserBadge[] = [
-  {
-    id: 'badge-1',
-    title: 'First Deep Focus',
-    description: 'Completed your first 45-minute live tracked session',
-    unlockedAt: new Date(),
-    icon: '⚡',
-  },
-  {
-    id: 'badge-2',
-    title: '7-Day Habit Sentinel',
-    description: 'Maintained continuous daily morning mindfulness streak',
-    unlockedAt: new Date(),
-    icon: '🔥',
-  },
-];
-
-const mockTransactions: ITransaction[] = [
-  {
-    _id: 'tx-1' as unknown as import('mongoose').Types.ObjectId,
-    userId: 'user-default',
-    type: 'TASK_COMPLETION',
-    pointsDelta: 150,
-    resultingBalance: 350,
-    description: 'Completed Deep Work session with 0% overtime',
-    createdAt: new Date(Date.now() - 3600000 * 4),
-  },
-  {
-    _id: 'tx-2' as unknown as import('mongoose').Types.ObjectId,
-    userId: 'user-default',
-    type: 'STREAK_BONUS',
-    pointsDelta: 200,
-    resultingBalance: 550,
-    description: 'Achieved 7-day habit streak multiplier',
-    createdAt: new Date(Date.now() - 3600000 * 2),
-  },
-];
-
 const initialState: VaultState = {
-  vaultBalance: 550,
-  totalPointsEarned: 1250,
+  vaultBalance: 0,
+  totalPointsEarned: 0,
   currencyPeg: {
     pointsPerUnit: 10, // 100 points = ₹10
     currencyCode: 'INR',
     symbol: '₹',
   },
-  streakFreezesCount: 1,
+  streakFreezesCount: 0,
   streakFreezeCost: 200,
-  rewards: mockRewards,
-  transactions: mockTransactions,
-  badges: mockBadges,
+  rewards: [],
+  transactions: [],
+  badges: [],
   isLoading: false,
   error: null,
 };
@@ -263,5 +183,6 @@ export const {
   setUserVaultStats,
 } = vaultSlice.actions;
 
-export default vaultSlice.reducer;
+export const setVaultUserData = setUserVaultStats;
 
+export default vaultSlice.reducer;

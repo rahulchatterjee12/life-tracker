@@ -13,8 +13,8 @@ export async function GET() {
       user = await User.create({
         email: DEFAULT_USER_EMAIL,
         name: 'Lead Architect',
-        vaultBalance: 550,
-        totalPointsEarned: 1250,
+        vaultBalance: 0,
+        totalPointsEarned: 0,
       });
     }
 

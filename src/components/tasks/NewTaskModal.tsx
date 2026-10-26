@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import {
+  addTask,
   addDeepWorkTask,
   addHabitTask,
   addAdminTask,
@@ -25,6 +26,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   const [description, setDescription] = useState('');
   const [importance, setImportance] = useState<TaskImportance>(3);
   const [isFrog, setIsFrog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Deep work fields
   const [targetMinutes, setTargetMinutes] = useState(45);
@@ -34,12 +36,10 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   const [nextTaskId, setNextTaskId] = useState<string>('');
 
   // Admin fields
-  const [dueDate, setDueDate] = useState<string>('2026-10-28');
+  const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringCycle, setRecurringCycle] = useState<AdminRecurringCycle>('monthly');
-  const [subtasks, setSubtasks] = useState<Array<{ title: string; offsetDaysBeforeParent: number }>>([
-    { title: 'Buy card / gift in advance', offsetDaysBeforeParent: 7 },
-  ]);
+  const [subtasks, setSubtasks] = useState<Array<{ title: string; offsetDaysBeforeParent: number }>>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   if (!isOpen) return null;
@@ -54,10 +54,23 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
     setSubtasks(subtasks.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setImportance(3);
+    setIsFrog(false);
+    setTargetMinutes(45);
+    setNextTaskId('');
+    setSubtasks([]);
+    setNewSubtaskTitle('');
+  };
 
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const dispatchFallback = () => {
     if (type === 'DEEP_WORK') {
       dispatch(
         addDeepWorkTask({
@@ -91,8 +104,73 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
         })
       );
     }
+  };
 
-    onClose();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    const taskPayload: Record<string, unknown> = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      type,
+      importance,
+      isFrog: type === 'DEEP_WORK' ? isFrog : false,
+    };
+
+    if (type === 'DEEP_WORK') {
+      taskPayload.deepWorkDetails = {
+        targetDurationMinutes: targetMinutes,
+        actualDurationSeconds: 0,
+        isLiveTracked: true,
+        overtimeBonusAwarded: false,
+        overtimeSeconds: 0,
+        sessions: [],
+      };
+    } else if (type === 'HABIT') {
+      taskPayload.habitDetails = {
+        frequency: habitFrequency,
+        customDays: [],
+        streakCount: 0,
+        bestStreak: 0,
+        monthlyGoal: 31,
+        nextTaskId: nextTaskId || undefined,
+      };
+    } else if (type === 'ADMIN') {
+      taskPayload.adminDetails = {
+        dueDate: new Date(dueDate),
+        isRecurring,
+        recurringCycle: isRecurring ? recurringCycle : 'none',
+        subtasks: subtasks.map((s, idx) => ({
+          id: `sub-${Date.now()}-${idx}`,
+          title: s.title,
+          completed: false,
+          offsetDaysBeforeParent: s.offsetDaysBeforeParent || 0,
+        })),
+      };
+    }
+
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskPayload),
+      });
+      const data = await res.json();
+      if (data.success && data.task) {
+        dispatch(addTask(data.task));
+      } else {
+        dispatchFallback();
+      }
+    } catch (err) {
+      console.error('Failed to create task on server:', err);
+      dispatchFallback();
+    } finally {
+      setIsSubmitting(false);
+      handleClose();
+    }
   };
 
   return (
@@ -111,7 +189,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
               New Task
             </h3>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1 rounded-md text-txt-3 hover:text-txt transition cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -348,16 +426,17 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
             <div className="flex justify-end gap-2 pt-3 border-t border-border-light">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-3 py-2 text-xs text-txt-2 hover:text-txt transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold transition cursor-pointer shadow-sm"
+                disabled={isSubmitting}
+                className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold transition cursor-pointer shadow-sm disabled:opacity-50"
               >
-                Create
+                {isSubmitting ? 'Creating...' : 'Create'}
               </button>
             </div>
           </form>

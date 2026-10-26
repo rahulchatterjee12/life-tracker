@@ -67,6 +67,15 @@ export default function TaskDetailModal({
 
   const handleReset = async () => {
     dispatch(setTaskCompletionStatus({ taskId, completed: false }));
+    try {
+      await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, completed: false }),
+      });
+    } catch {
+      // Local state is already updated
+    }
   };
 
   const handleLaunchTimer = () => {

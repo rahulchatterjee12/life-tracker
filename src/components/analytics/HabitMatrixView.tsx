@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useAppSelector } from '@/lib/hooks';
-import { useMounted } from '@/lib/useMounted';
 import {
   Flame,
   Check,
@@ -34,7 +33,6 @@ const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function HabitMatrixView() {
   const tasks = useAppSelector((state) => state.tasks.items);
-  const isMounted = useMounted();
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
 
   // Filter only habits (matching the daily habits from user's spreadsheet)
@@ -182,12 +180,12 @@ export default function HabitMatrixView() {
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border-light text-xs">
             <TrendingUp className="w-3.5 h-3.5 text-ok" />
             <span className="text-txt-2">Rate:</span>
-            <span className="font-semibold text-txt">{isMounted ? monthlyCompletionRate : 56}%</span>
+            <span className="font-semibold text-txt">{monthlyCompletionRate}%</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-border-light text-xs">
             <Flame className="w-3.5 h-3.5 text-warn" />
             <span className="text-txt-2">Streak:</span>
-            <span className="font-semibold text-txt">{isMounted ? bestStreak : 14}d</span>
+            <span className="font-semibold text-txt">{bestStreak}d</span>
           </div>
         </div>
       </div>
@@ -350,14 +348,14 @@ export default function HabitMatrixView() {
                 stroke="var(--accent)"
                 strokeWidth="8"
                 strokeDasharray={donutCircumference}
-                strokeDashoffset={isMounted ? donutOffset : donutCircumference * 0.44}
+                strokeDashoffset={donutOffset}
                 strokeLinecap="round"
                 className="transition-all duration-700 ease-out"
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <span className="text-2xl font-bold text-txt">
-                {isMounted ? monthlyCompletionRate : 56}%
+                {monthlyCompletionRate}%
               </span>
               <span className="text-[10px] text-txt-3">Completed</span>
             </div>
@@ -366,12 +364,12 @@ export default function HabitMatrixView() {
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border-light text-center">
             <div>
               <p className="text-[10px] uppercase tracking-wider text-txt-3 font-medium">Completed</p>
-              <p className="text-base font-semibold text-ok mt-0.5">{isMounted ? totalCompletedChecks : 194}</p>
+              <p className="text-base font-semibold text-ok mt-0.5">{totalCompletedChecks}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-txt-3 font-medium">Remaining</p>
               <p className="text-base font-semibold text-txt mt-0.5">
-                {isMounted ? totalPossibleChecks - totalCompletedChecks : 172}
+                {Math.max(0, totalPossibleChecks - totalCompletedChecks)}
               </p>
             </div>
           </div>
@@ -418,51 +416,60 @@ export default function HabitMatrixView() {
           <span className="text-xs text-txt-3">Ranked by monthly execution</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {sortedByRate.slice(0, 6).map((habit, idx) => {
-            const completedCount = getHabitCompletedCount(habit);
-            const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
-            const rate = Math.round((completedCount / monthlyGoal) * 100);
-            const streak = habit.habitDetails?.streakCount || 0;
+        {habits.length === 0 ? (
+          <div className="p-6 rounded-xl bg-surface border border-border-light text-center space-y-1">
+            <p className="text-xs font-medium text-txt">No habits created yet</p>
+            <p className="text-[11px] text-txt-3">
+              Add habits in Manage Tasks to see your consistency rankings here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sortedByRate.slice(0, 6).map((habit, idx) => {
+              const completedCount = getHabitCompletedCount(habit);
+              const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
+              const rate = Math.round((completedCount / monthlyGoal) * 100);
+              const streak = habit.habitDetails?.streakCount || 0;
 
-            return (
-              <div
-                key={String(habit._id)}
-                className="p-3.5 rounded-xl bg-surface border border-border-light flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-5 h-5 rounded-full bg-surface-2 flex items-center justify-center text-xs font-bold text-txt-3 shrink-0">
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-txt truncate">{habit.title}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-txt-3 font-mono">
-                        {completedCount}/{monthlyGoal} ({rate}%)
-                      </span>
-                      {habit.completed ? (
-                        <span className="text-[10px] text-ok font-medium flex items-center gap-0.5">
-                          <Check className="w-2.5 h-2.5" /> Done
+              return (
+                <div
+                  key={String(habit._id)}
+                  className="p-3.5 rounded-xl bg-surface border border-border-light flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-5 h-5 rounded-full bg-surface-2 flex items-center justify-center text-xs font-bold text-txt-3 shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-txt truncate">{habit.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-txt-3 font-mono">
+                          {completedCount}/{monthlyGoal} ({rate}%)
                         </span>
-                      ) : (
-                        <span className="text-[10px] text-txt-3">Pending</span>
-                      )}
+                        {habit.completed ? (
+                          <span className="text-[10px] text-ok font-medium flex items-center gap-0.5">
+                            <Check className="w-2.5 h-2.5" /> Done
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-txt-3">Pending</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {streak > 0 && (
-                    <span className="flex items-center gap-0.5 text-xs text-warn font-semibold font-mono px-2 py-0.5 rounded-md bg-warn/10">
-                      <Flame className="w-3 h-3" />
-                      {streak}d
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {streak > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs text-warn font-semibold font-mono px-2 py-0.5 rounded-md bg-warn/10">
+                        <Flame className="w-3 h-3" />
+                        {streak}d
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* === ROW 4: 31-DAY READ-ONLY HABIT MATRIX === */}
@@ -562,7 +569,23 @@ export default function HabitMatrixView() {
             </thead>
 
             <tbody className="divide-y divide-border-light bg-bg text-xs">
-              {habits.map((habit) => {
+              {habits.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={DAYS_IN_MONTH + 4}
+                    className="py-12 text-center text-txt-3 bg-surface/30"
+                  >
+                    <div className="flex flex-col items-center justify-center space-y-1.5">
+                      <Flame className="w-6 h-6 text-txt-3 opacity-40 mb-1" />
+                      <p className="text-xs font-medium text-txt">No daily habits to display</p>
+                      <p className="text-[11px] text-txt-3 max-w-sm">
+                        Create habits in Manage Tasks to track your 31-day visual streak matrix.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                habits.map((habit) => {
                 const habitId = String(habit._id);
                 const completedCount = getHabitCompletedCount(habit);
                 const monthlyGoal = habit.habitDetails?.monthlyGoal || 31;
@@ -662,7 +685,8 @@ export default function HabitMatrixView() {
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>

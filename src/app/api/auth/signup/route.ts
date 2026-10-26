@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       vaultBalance: 0,
       currentStreak: 0,
       longestStreak: 0,
-      streakFreezesCount: 1, // 1 welcome streak freeze
+      streakFreezesCount: 0,
       badges: [],
       currencyPeg: {
         pointsPerUnit: 10,

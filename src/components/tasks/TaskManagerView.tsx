@@ -242,7 +242,24 @@ export default function TaskManagerView() {
           <span>Showing {sortedTasks.length} of {tasks.length} items</span>
         </div>
 
-        {sortedTasks.length === 0 ? (
+        {tasks.length === 0 ? (
+          <div className="p-12 text-center rounded-2xl bg-surface border border-border-light space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-accent/10 text-accent mx-auto flex items-center justify-center">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-semibold text-txt">No tasks or habits yet</p>
+            <p className="text-xs text-txt-3 max-w-sm mx-auto">
+              Create your first habit, deep work block, or administrative task to begin tracking.
+            </p>
+            <button
+              onClick={() => setIsNewModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold transition cursor-pointer shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create Task</span>
+            </button>
+          </div>
+        ) : sortedTasks.length === 0 ? (
           <div className="p-12 text-center rounded-2xl bg-surface border border-border-light space-y-3">
             <p className="text-sm text-txt-3">No tasks or habits match your current filter.</p>
             <button
