@@ -150,6 +150,18 @@ export async function PUT(request: Request) {
     if (updates.completed === false) {
       task.completed = false;
       task.completedAt = undefined;
+      const pointsToDeduct = task.pointsAwarded || 0;
+      task.pointsAwarded = 0;
+
+      // Revert user vault balance and total points earned
+      if (pointsToDeduct > 0) {
+        const user = await User.findById(task.userId);
+        if (user) {
+          user.vaultBalance = Math.max(0, (user.vaultBalance || 0) - pointsToDeduct);
+          user.totalPointsEarned = Math.max(0, (user.totalPointsEarned || 0) - pointsToDeduct);
+          await user.save();
+        }
+      }
 
       // Remove today from habit completed dates
       if (task.type === 'HABIT' && task.habitDetails) {
@@ -253,9 +265,18 @@ export async function PUT(request: Request) {
     task.updatedAt = new Date();
     await task.save();
 
+    const targetUser = await User.findById(task.userId);
     return NextResponse.json({
       success: true,
       task,
+      user: targetUser
+        ? {
+            vaultBalance: targetUser.vaultBalance,
+            totalPointsEarned: targetUser.totalPointsEarned,
+            currentStreak: targetUser.currentStreak,
+            longestStreak: targetUser.longestStreak,
+          }
+        : undefined,
     });
   } catch (error) {
     console.error('Failed to update task:', error);

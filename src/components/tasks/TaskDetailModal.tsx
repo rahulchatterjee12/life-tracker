@@ -93,6 +93,15 @@ export default function TaskDetailModal({
       const data = await res.json();
       if (data.success && data.task) {
         dispatch(updateTask(data.task));
+        if (data.user) {
+          dispatch(
+            setUserVaultStats({
+              vaultBalance: data.user.vaultBalance,
+              totalPointsEarned: data.user.totalPointsEarned,
+              streakFreezesCount: data.user.streakFreezesCount,
+            })
+          );
+        }
       }
     } catch (err) {
       console.error('Failed to reset task completion on server:', err);

@@ -346,6 +346,10 @@ export const tasksSlice = createSlice({
           }
         } else {
           task.completedAt = undefined;
+          task.pointsAwarded = 0;
+          if (task.completionHistory) {
+            task.completionHistory = task.completionHistory.filter((e) => e.dateStr !== activeDateStr);
+          }
           task.habitDetails.completedDates = dates.filter((d) => d !== activeDateStr);
           if (task.habitDetails.lastCompletedDate === activeDateStr) {
             const remaining = task.habitDetails.completedDates;
@@ -365,10 +369,23 @@ export const tasksSlice = createSlice({
             task.deepWorkDetails.actualDurationSeconds = targetSecs;
           }
           task.pointsAwarded = task.pointsAwarded || 50;
+        } else if (!completed) {
+          task.pointsAwarded = 0;
+          const activeDateStr = getLocalDateString();
+          if (task.completionHistory) {
+            task.completionHistory = task.completionHistory.filter((e) => e.dateStr !== activeDateStr);
+          }
         }
       } else if (task.type === 'ADMIN') {
         task.completed = completed;
         task.completedAt = completed ? new Date() : undefined;
+        if (!completed) {
+          task.pointsAwarded = 0;
+          const activeDateStr = getLocalDateString();
+          if (task.completionHistory) {
+            task.completionHistory = task.completionHistory.filter((e) => e.dateStr !== activeDateStr);
+          }
+        }
       }
     },
 
