@@ -47,6 +47,7 @@ export interface IUser {
   name: string;
   password?: string;
   isEmailVerified?: boolean;
+  geminiApiKey?: string;
   totalPointsEarned: number;
   vaultBalance: number;
   currentStreak: number;

@@ -109,7 +109,7 @@ export async function generateAIRetrospective(
   transactions: ITransaction[] = []
 ): Promise<AIRetrospectiveReport> {
   const metrics = compileWeeklyMetrics(tasks, transactions);
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
+  const apiKey = user.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
 
   if (apiKey) {
     try {

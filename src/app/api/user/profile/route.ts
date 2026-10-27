@@ -56,6 +56,8 @@ export async function GET() {
         streakFreezesCount: user.streakFreezesCount,
         currencyPeg: user.currencyPeg,
         badges: user.badges || [],
+        hasCustomGeminiKey: Boolean(user.geminiApiKey),
+        geminiApiKey: user.geminiApiKey || '',
       },
       stats: {
         deepWork: {
@@ -93,12 +95,17 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, currencyPeg } = body;
+    const { name, currencyPeg, geminiApiKey } = body;
 
     await connectToDatabase();
     const user = await User.findById(session.userId);
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    if (geminiApiKey !== undefined) {
+      const cleanKey = typeof geminiApiKey === 'string' ? geminiApiKey.trim() : '';
+      user.geminiApiKey = cleanKey || undefined;
     }
 
     if (name !== undefined) {
@@ -139,6 +146,8 @@ export async function PUT(req: Request) {
         streakFreezesCount: user.streakFreezesCount,
         currencyPeg: user.currencyPeg,
         badges: user.badges,
+        hasCustomGeminiKey: Boolean(user.geminiApiKey),
+        geminiApiKey: user.geminiApiKey || '',
       },
     });
   } catch (error: unknown) {

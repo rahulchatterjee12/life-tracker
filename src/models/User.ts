@@ -28,6 +28,7 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true },
     password: { type: String, required: true },
     isEmailVerified: { type: Boolean, default: true },
+    geminiApiKey: { type: String },
     totalPointsEarned: { type: Number, default: 0 },
     vaultBalance: { type: Number, default: 0 },
     currentStreak: { type: Number, default: 0 },

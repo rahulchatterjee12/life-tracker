@@ -24,6 +24,13 @@ import {
   Coins,
   History,
   TrendingUp,
+  Bot,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface ProfileData {
@@ -37,6 +44,8 @@ interface ProfileData {
   currentStreak: number;
   longestStreak: number;
   streakFreezesCount: number;
+  hasCustomGeminiKey?: boolean;
+  geminiApiKey?: string;
   currencyPeg?: {
     pointsPerUnit: number;
     currencyCode: string;
@@ -108,6 +117,13 @@ export default function UserProfileView() {
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
+  // Gemini API Key state
+  const [geminiKeyInput, setGeminiKeyInput] = useState('');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isSavingGeminiKey, setIsSavingGeminiKey] = useState(false);
+  const [geminiKeyMessage, setGeminiKeyMessage] = useState<{ type: 'ok' | 'bad'; text: string } | null>(null);
+  const [showGeminiInstructions, setShowGeminiInstructions] = useState(true);
+
   // Load profile data from API
   const loadProfile = async () => {
     try {
@@ -119,6 +135,9 @@ export default function UserProfileView() {
         setStats(data.stats);
         setTransactions(data.recentActivity || []);
         setEditName(data.profile.name);
+        if (data.profile.geminiApiKey) {
+          setGeminiKeyInput(data.profile.geminiApiKey);
+        }
         if (data.profile.currencyPeg) {
           setEditCurrencySymbol(data.profile.currencyPeg.symbol || '₹');
           setEditCurrencyCode(data.profile.currencyPeg.currencyCode || 'INR');
@@ -129,6 +148,56 @@ export default function UserProfileView() {
       console.error('Failed to load profile data:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveGeminiKey = async (keyToSave?: string) => {
+    setIsSavingGeminiKey(true);
+    setGeminiKeyMessage(null);
+    const value = keyToSave !== undefined ? keyToSave : geminiKeyInput.trim();
+
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          geminiApiKey: value,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                hasCustomGeminiKey: Boolean(value),
+                geminiApiKey: value,
+              }
+            : null
+        );
+        if (keyToSave === '') {
+          setGeminiKeyInput('');
+        }
+        setGeminiKeyMessage({
+          type: 'ok',
+          text: value
+            ? 'Gemini API Key successfully saved and activated!'
+            : 'Gemini API Key removed. AI features will use system defaults.',
+        });
+        setTimeout(() => setGeminiKeyMessage(null), 4000);
+      } else {
+        setGeminiKeyMessage({
+          type: 'bad',
+          text: data.error || 'Failed to save Gemini API Key',
+        });
+      }
+    } catch {
+      setGeminiKeyMessage({
+        type: 'bad',
+        text: 'Network error while saving Gemini API Key',
+      });
+    } finally {
+      setIsSavingGeminiKey(false);
     }
   };
 
@@ -264,6 +333,8 @@ export default function UserProfileView() {
     longestStreak: user?.longestStreak || 0,
     streakFreezesCount: user?.streakFreezesCount || 0,
     badges: user?.badges || [],
+    hasCustomGeminiKey: false,
+    geminiApiKey: '',
     currencyPeg: user?.currencyPeg || { pointsPerUnit: 10, currencyCode: 'INR', symbol: '₹' },
   };
 
@@ -640,6 +711,171 @@ export default function UserProfileView() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* AI Coaching & Google Gemini API Key Configuration */}
+      <div className="p-6 rounded-2xl bg-surface border border-border-light space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 rounded-lg bg-accent/10 text-accent">
+              <Sparkles className="w-4 h-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold text-txt">
+                AI Coaching &amp; Gemini Integration
+              </h3>
+              <p className="text-xs text-txt-3">
+                Power your weekly retrospectives and executive coaching with Google Gemini AI.
+              </p>
+            </div>
+          </div>
+
+          <div className="self-start sm:self-auto">
+            {activeProfile.hasCustomGeminiKey ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-ok/10 border border-ok/20 text-ok text-[11px] font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Custom Key Active</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-2 border border-border-light text-txt-2 text-[11px] font-medium">
+                <Bot className="w-3.5 h-3.5 text-txt-3" />
+                <span>Default / Fallback</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Feedback message */}
+        {geminiKeyMessage && (
+          <div
+            className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+              geminiKeyMessage.type === 'ok'
+                ? 'bg-ok/10 border-ok/20 text-ok'
+                : 'bg-bad/10 border-bad/20 text-bad'
+            }`}
+          >
+            {geminiKeyMessage.type === 'ok' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            ) : (
+              <X className="w-4 h-4 shrink-0" />
+            )}
+            <span>{geminiKeyMessage.text}</span>
+          </div>
+        )}
+
+        {/* Key Input & Actions */}
+        <div className="p-4 rounded-xl bg-surface-2 border border-border-light space-y-3">
+          <label className="block text-[11px] font-medium uppercase text-txt-2">
+            Google Gemini API Key
+          </label>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showGeminiKey ? 'text' : 'password'}
+                placeholder="Paste your AIzaSy... key here"
+                value={geminiKeyInput}
+                onChange={(e) => setGeminiKeyInput(e.target.value)}
+                className="w-full pl-3 pr-10 py-2 rounded-xl bg-bg border border-border text-xs text-txt font-mono placeholder-txt-3 focus:outline-hidden focus:border-accent"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGeminiKey(!showGeminiKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-txt-3 hover:text-txt cursor-pointer p-0.5"
+                title={showGeminiKey ? 'Hide API Key' : 'Reveal API Key'}
+              >
+                {showGeminiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={isSavingGeminiKey}
+                onClick={() => handleSaveGeminiKey()}
+                className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                {isSavingGeminiKey && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <Check className="w-3.5 h-3.5" />
+                <span>Save Key</span>
+              </button>
+
+              {activeProfile.hasCustomGeminiKey && (
+                <button
+                  type="button"
+                  disabled={isSavingGeminiKey}
+                  onClick={() => handleSaveGeminiKey('')}
+                  className="px-3 py-2 rounded-xl bg-bad/10 hover:bg-bad/20 text-bad text-xs font-medium transition cursor-pointer"
+                  title="Remove saved key and revert to system defaults"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Expandable Step-by-Step Instructions */}
+        <div className="rounded-xl border border-border-light bg-surface-2/60 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowGeminiInstructions(!showGeminiInstructions)}
+            className="w-full px-4 py-3 flex items-center justify-between text-xs font-medium text-txt hover:bg-surface-2 cursor-pointer transition text-left"
+          >
+            <div className="flex items-center gap-2 text-accent">
+              <HelpCircle className="w-4 h-4 shrink-0" />
+              <span className="font-semibold">How to get a Free Google Gemini API Key</span>
+            </div>
+            {showGeminiInstructions ? (
+              <ChevronUp className="w-4 h-4 text-txt-3" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-txt-3" />
+            )}
+          </button>
+
+          {showGeminiInstructions && (
+            <div className="px-4 pb-4 pt-1 border-t border-border-light space-y-3 text-xs text-txt-2">
+              <p className="text-txt-3 leading-relaxed">
+                Google provides a <strong>100% free tier</strong> for developers and individuals. No credit card is required:
+              </p>
+
+              <ol className="space-y-2 list-decimal list-inside text-txt-2 leading-relaxed pl-1">
+                <li>
+                  Open{' '}
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-accent font-semibold underline hover:text-accent-hover"
+                  >
+                    <span>Google AI Studio</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>{' '}
+                  in your browser.
+                </li>
+                <li>Sign in using any free personal Google Account.</li>
+                <li>
+                  Click the blue <span className="font-semibold text-txt">"Create API Key"</span> button.
+                </li>
+                <li>
+                  Select or create a new project (Google handles this automatically in 1 click).
+                </li>
+                <li>
+                  Copy your newly created key (starts with <code className="bg-bg px-1.5 py-0.5 rounded text-accent font-mono">AIzaSy...</code>).
+                </li>
+                <li>
+                  Paste it into the field above and click <span className="font-semibold text-txt">"Save Key"</span>.
+                </li>
+              </ol>
+
+              <div className="p-3 rounded-xl bg-accent/5 border border-accent/20 text-[11px] text-txt-2 flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+                <span>
+                  The free tier includes <strong>15 requests per minute (RPM)</strong> and over 1,500 requests per day at zero cost. Your key is stored securely in your private profile.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Password Management & Security (With OTP Verification) */}
