@@ -105,7 +105,6 @@ export default function UserProfileView() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-  const [devPreviewOtp, setDevPreviewOtp] = useState<string | null>(null);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -201,9 +200,6 @@ export default function UserProfileView() {
     if (res.success) {
       setPasswordChangeStep('otp_sent');
       setResendCooldown(60);
-      if (res.previewOtp) {
-        setDevPreviewOtp(res.previewOtp);
-      }
     } else {
       setPasswordError(res.error || 'Failed to send OTP code');
     }
@@ -720,19 +716,6 @@ export default function UserProfileView() {
                 </span>
               </button>
             </div>
-
-            {devPreviewOtp && (
-              <div className="p-2 rounded-lg bg-warn/10 border border-warn/30 text-warn text-xs flex items-center justify-between">
-                <span>Dev OTP Preview: <strong>{devPreviewOtp}</strong></span>
-                <button
-                  type="button"
-                  onClick={() => setPasswordOtp(devPreviewOtp)}
-                  className="underline font-bold"
-                >
-                  Fill Code
-                </button>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">

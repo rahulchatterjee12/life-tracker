@@ -43,7 +43,7 @@ interface AuthContextType {
     type: OtpActionType,
     name?: string,
     password?: string
-  ) => Promise<{ success: boolean; message?: string; previewOtp?: string; error?: string }>;
+  ) => Promise<{ success: boolean; message?: string; error?: string }>;
   verifyOtp: (
     email: string,
     otp: string,
@@ -175,7 +175,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         return {
           success: true,
           message: data.message,
-          previewOtp: data.previewOtp,
         };
       }
       return { success: false, error: data.error || 'Failed to send verification code' };

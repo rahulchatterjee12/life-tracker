@@ -113,23 +113,21 @@ export async function POST(req: Request) {
       userName: targetUserName,
     });
 
-    let message = `A 6-digit verification code has been sent to ${normalizedEmail}`;
-    if (emailResult.error) {
-      if (
-        emailResult.error.includes('Application-specific password required') ||
-        emailResult.error.includes('534-5.7.9')
-      ) {
-        message = `Code generated! Gmail requires an App Password in .env to deliver to inbox. For local testing, your OTP is: ${otp}`;
-      } else {
-        message = `Code generated! (SMTP note: ${emailResult.error})`;
-      }
+    if (!emailResult.success) {
+      // If email failed to send, remove pending OTP to prevent orphan records
+      await OtpVerification.deleteMany({ email: normalizedEmail, type: otpType });
+      return NextResponse.json(
+        {
+          success: false,
+          error: emailResult.error || 'Failed to send verification email. Please try again.',
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      message,
-      previewOtp: emailResult.previewOtp,
-      smtpError: emailResult.error,
+      message: `A 6-digit verification code has been sent to ${normalizedEmail}`,
     });
   } catch (error: unknown) {
     console.error('Failed to send OTP:', error);

@@ -49,7 +49,6 @@ export default function AuthModal({
   // Status & feedback
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [devPreviewOtp, setDevPreviewOtp] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -59,7 +58,6 @@ export default function AuthModal({
       setView(defaultMode);
       setError(null);
       setInfoMessage(null);
-      setDevPreviewOtp(null);
       setOtp('');
     }
   }, [isOpen, defaultMode]);
@@ -116,9 +114,6 @@ export default function AuthModal({
 
     if (res.success) {
       setInfoMessage(res.message || `Verification code sent to ${email}`);
-      if (res.previewOtp) {
-        setDevPreviewOtp(res.previewOtp);
-      }
       setResendCooldown(60);
       setView('verify_signup_otp');
     } else {
@@ -164,9 +159,6 @@ export default function AuthModal({
 
     if (res.success) {
       setInfoMessage(res.message || `Password reset code sent to ${email}`);
-      if (res.previewOtp) {
-        setDevPreviewOtp(res.previewOtp);
-      }
       setResendCooldown(60);
       setView('forgot_verify');
     } else {
@@ -220,9 +212,6 @@ export default function AuthModal({
 
     if (res.success) {
       setInfoMessage(`A fresh verification code was sent to ${email}`);
-      if (res.previewOtp) {
-        setDevPreviewOtp(res.previewOtp);
-      }
       setResendCooldown(60);
     } else {
       setError(res.error || 'Failed to resend code');
@@ -313,27 +302,6 @@ export default function AuthModal({
             <div className="p-3 rounded-xl bg-accent/10 border border-accent/20 text-accent text-xs font-medium flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-accent" />
               <span>{infoMessage}</span>
-            </div>
-          )}
-
-          {/* Development Preview Banner (for local offline testing without SMTP) */}
-          {devPreviewOtp && (
-            <div className="p-2.5 rounded-xl bg-warn/10 border border-warn/30 text-warn text-xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-[11px] uppercase tracking-wider">
-                  Dev OTP Preview:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setOtp(devPreviewOtp)}
-                  className="underline hover:text-warn-hover font-mono font-bold cursor-pointer"
-                >
-                  Auto-fill ({devPreviewOtp})
-                </button>
-              </div>
-              <p className="text-[10px] opacity-80">
-                Configure SMTP in <code>.env</code> to deliver real emails to recipients.
-              </p>
             </div>
           )}
 

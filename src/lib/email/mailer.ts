@@ -14,8 +14,7 @@ export async function sendOtpEmail({
   otp,
   type,
   userName,
-}: SendOtpOptions): Promise<{ success: boolean; previewOtp?: string; error?: string }> {
-  const isProd = process.env.NODE_ENV === 'production';
+}: SendOtpOptions): Promise<{ success: boolean; error?: string }> {
   const smtpHost = process.env.SMTP_HOST;
   const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
   const smtpUser = process.env.SMTP_USER;
@@ -112,80 +111,66 @@ export async function sendOtpEmail({
     </html>
   `;
 
-  // Always output stylized log to server terminal for immediate developer awareness
-  console.log('\n============================================================');
-  console.log(`[LIFE METRIC OTP SERVICE] Email OTP Generated`);
-  console.log(`Type:       ${type}`);
-  console.log(`Recipient:  ${to}`);
-  console.log(`OTP Code:   ${otp}`);
-  console.log(`Expires In: 10 minutes`);
-  console.log('============================================================\n');
+  console.log(`[LIFE METRIC OTP SERVICE] Dispatching ${type} verification code to ${to}...`);
 
-  if (smtpHost && smtpUser && smtpPass) {
-    try {
-      const isGmail = smtpHost.toLowerCase().includes('gmail');
-      const cleanPass = smtpPass.trim().replace(/\s+/g, '');
-
-      const transporter = isGmail
-        ? nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-              user: smtpUser.trim(),
-              pass: cleanPass,
-            },
-          })
-        : nodemailer.createTransport({
-            host: smtpHost,
-            port: smtpPort,
-            secure: smtpPort === 465,
-            auth: {
-              user: smtpUser.trim(),
-              pass: smtpPass,
-            },
-          });
-
-      await transporter.sendMail({
-        from: smtpFrom,
-        to,
-        subject,
-        html: htmlContent,
-      });
-
-      return {
-        success: true,
-        previewOtp: !isProd ? otp : undefined,
-      };
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error('[LIFE METRIC EMAIL ERROR] Failed to send via SMTP:', errorMsg);
-
-      if (
-        errorMsg.includes('Application-specific password required') ||
-        errorMsg.includes('534-5.7.9') ||
-        errorMsg.includes('InvalidSecondFactor')
-      ) {
-        console.warn(
-          '\n⚠️  GMAIL CONFIGURATION NOTICE:\n' +
-          'Google requires an App Password when using Gmail SMTP.\n' +
-          '1. Enable 2-Step Verification in your Google Account: https://myaccount.google.com/security\n' +
-          '2. Generate an App Password at: https://myaccount.google.com/apppasswords\n' +
-          '3. Set SMTP_PASS in your .env to the 16-character App Password (e.g. "abcd efgh ijkl mnop")\n'
-        );
-      }
-
-      // In dev mode, return previewOtp so dev workflow is not blocked
-      return {
-        success: !isProd,
-        previewOtp: !isProd ? otp : undefined,
-        error: errorMsg,
-      };
-    }
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.error('[LIFE METRIC EMAIL ERROR] SMTP credentials not configured in environment variables.');
+    return {
+      success: false,
+      error: 'Email service is not configured on the server. Please configure SMTP in your server environment.',
+    };
   }
 
-  // SMTP not configured yet (local dev environment)
-  return {
-    success: true,
-    previewOtp: otp,
-  };
-}
+  try {
+    const isGmail = smtpHost.toLowerCase().includes('gmail');
+    const cleanPass = smtpPass.trim().replace(/\s+/g, '');
 
+    const transporter = isGmail
+      ? nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: smtpUser.trim(),
+            pass: cleanPass,
+          },
+        })
+      : nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser.trim(),
+            pass: smtpPass,
+          },
+        });
+
+    await transporter.sendMail({
+      from: smtpFrom,
+      to,
+      subject,
+      html: htmlContent,
+    });
+
+    console.log(`[LIFE METRIC OTP SERVICE] Email successfully delivered to ${to}`);
+    return { success: true };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error('[LIFE METRIC EMAIL ERROR] Failed to send email via SMTP:', errorMsg);
+
+    if (
+      errorMsg.includes('Application-specific password required') ||
+      errorMsg.includes('534-5.7.9') ||
+      errorMsg.includes('InvalidSecondFactor')
+    ) {
+      return {
+        success: false,
+        error:
+          'Gmail rejected the connection. A Google App Password is required instead of your regular password. Please generate one in your Google Account security settings.',
+      };
+    }
+
+    return {
+      success: false,
+      error: `Failed to deliver email: ${errorMsg}`,
+    };
+  }
+}
