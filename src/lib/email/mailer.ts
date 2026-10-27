@@ -123,15 +123,26 @@ export async function sendOtpEmail({
 
   if (smtpHost && smtpUser && smtpPass) {
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
+      const isGmail = smtpHost.toLowerCase().includes('gmail');
+      const cleanPass = smtpPass.trim().replace(/\s+/g, '');
+
+      const transporter = isGmail
+        ? nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+              user: smtpUser.trim(),
+              pass: cleanPass,
+            },
+          })
+        : nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpPort === 465,
+            auth: {
+              user: smtpUser.trim(),
+              pass: smtpPass,
+            },
+          });
 
       await transporter.sendMail({
         from: smtpFrom,
@@ -145,12 +156,28 @@ export async function sendOtpEmail({
         previewOtp: !isProd ? otp : undefined,
       };
     } catch (err: unknown) {
-      console.error('[LIFE METRIC EMAIL ERROR] Failed to send via SMTP:', err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[LIFE METRIC EMAIL ERROR] Failed to send via SMTP:', errorMsg);
+
+      if (
+        errorMsg.includes('Application-specific password required') ||
+        errorMsg.includes('534-5.7.9') ||
+        errorMsg.includes('InvalidSecondFactor')
+      ) {
+        console.warn(
+          '\n⚠️  GMAIL CONFIGURATION NOTICE:\n' +
+          'Google requires an App Password when using Gmail SMTP.\n' +
+          '1. Enable 2-Step Verification in your Google Account: https://myaccount.google.com/security\n' +
+          '2. Generate an App Password at: https://myaccount.google.com/apppasswords\n' +
+          '3. Set SMTP_PASS in your .env to the 16-character App Password (e.g. "abcd efgh ijkl mnop")\n'
+        );
+      }
+
       // In dev mode, return previewOtp so dev workflow is not blocked
       return {
         success: !isProd,
         previewOtp: !isProd ? otp : undefined,
-        error: isProd ? (err as Error).message : undefined,
+        error: errorMsg,
       };
     }
   }
@@ -161,3 +188,4 @@ export async function sendOtpEmail({
     previewOtp: otp,
   };
 }
+

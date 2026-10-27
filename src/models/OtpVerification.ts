@@ -58,3 +58,4 @@ const OtpVerificationSchema = new Schema<IOtpVerification>(
 export const OtpVerification: Model<IOtpVerification> =
   models.OtpVerification || model<IOtpVerification>('OtpVerification', OtpVerificationSchema);
 export default OtpVerification;
+

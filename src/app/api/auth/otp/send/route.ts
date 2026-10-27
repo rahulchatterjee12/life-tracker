@@ -113,10 +113,23 @@ export async function POST(req: Request) {
       userName: targetUserName,
     });
 
+    let message = `A 6-digit verification code has been sent to ${normalizedEmail}`;
+    if (emailResult.error) {
+      if (
+        emailResult.error.includes('Application-specific password required') ||
+        emailResult.error.includes('534-5.7.9')
+      ) {
+        message = `Code generated! Gmail requires an App Password in .env to deliver to inbox. For local testing, your OTP is: ${otp}`;
+      } else {
+        message = `Code generated! (SMTP note: ${emailResult.error})`;
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `A 6-digit verification code has been sent to ${normalizedEmail}`,
+      message,
       previewOtp: emailResult.previewOtp,
+      smtpError: emailResult.error,
     });
   } catch (error: unknown) {
     console.error('Failed to send OTP:', error);
@@ -124,3 +137,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
+
