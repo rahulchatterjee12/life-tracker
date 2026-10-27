@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import { updateTask } from '@/lib/features/tasks/tasksSlice';
 import { ITask, TaskImportance, HabitFrequency, AdminRecurringCycle } from '@/types/database';
+import { getMonthlyScheduledDays } from '@/lib/gamification/streaks';
 import { X, Calendar, Clock, Flame, Link as LinkIcon } from 'lucide-react';
 
 const WEEK_DAYS = [
@@ -49,21 +50,30 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
   };
 
   const [selectedDays, setSelectedDays] = useState<number[]>(getInitialDays);
-  const [monthlyGoal, setMonthlyGoal] = useState<number>(
-    task.habitDetails?.monthlyGoal || 31
-  );
+  const [monthlyGoal, setMonthlyGoal] = useState<number>(() => getMonthlyScheduledDays(task.habitDetails));
   const [nextTaskId, setNextTaskId] = useState<string>(
     task.habitDetails?.nextTaskId ? String(task.habitDetails.nextTaskId) : ''
   );
 
+  const updateDaysAndGoal = (days: number[]) => {
+    setSelectedDays(days);
+    const isAll = days.length === 7;
+    const computed: HabitFrequency = isAll ? 'daily' : 'custom';
+    setMonthlyGoal(getMonthlyScheduledDays({ frequency: computed, customDays: days }));
+  };
+
   const toggleDay = (d: number) => {
+    let nextDays: number[];
     if (selectedDays.includes(d)) {
       if (selectedDays.length > 1) {
-        setSelectedDays(selectedDays.filter((x) => x !== d));
+        nextDays = selectedDays.filter((x) => x !== d);
+      } else {
+        return;
       }
     } else {
-      setSelectedDays([...selectedDays, d].sort((a, b) => a - b));
+      nextDays = [...selectedDays, d].sort((a, b) => a - b);
     }
+    updateDaysAndGoal(nextDays);
   };
 
   // Admin fields
@@ -277,7 +287,7 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setSelectedDays([0, 1, 2, 3, 4, 5, 6])}
+                    onClick={() => updateDaysAndGoal([0, 1, 2, 3, 4, 5, 6])}
                     className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
                       selectedDays.length === 7
                         ? 'bg-accent/15 text-accent font-semibold'
@@ -288,7 +298,7 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedDays([1, 2, 3, 4, 5])}
+                    onClick={() => updateDaysAndGoal([1, 2, 3, 4, 5])}
                     className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
                       selectedDays.length === 5 && !selectedDays.includes(0) && !selectedDays.includes(6)
                         ? 'bg-accent/15 text-accent font-semibold'
@@ -299,7 +309,7 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedDays([0, 6])}
+                    onClick={() => updateDaysAndGoal([0, 6])}
                     className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition cursor-pointer ${
                       selectedDays.length === 2 && selectedDays.includes(0) && selectedDays.includes(6)
                         ? 'bg-accent/15 text-accent font-semibold'

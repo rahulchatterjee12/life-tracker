@@ -6,6 +6,7 @@ import { deleteTask } from '@/lib/features/tasks/tasksSlice';
 import { ITask, TaskType } from '@/types/database';
 import NewTaskModal from '@/components/tasks/NewTaskModal';
 import EditTaskModal from '@/components/tasks/EditTaskModal';
+import { getMonthlyScheduledDays } from '@/lib/gamification/streaks';
 import {
   Plus,
   Search,
@@ -334,7 +335,7 @@ export default function TaskManagerView() {
                               </span>
                               <span>·</span>
                               <span>
-                                Goal: <span className="text-txt font-medium">{task.habitDetails?.monthlyGoal || 31} days/mo</span>
+                                Scheduled: <span className="text-txt font-medium">{getMonthlyScheduledDays(task.habitDetails)} days/mo</span>
                               </span>
                               <span>·</span>
                               <span className="flex items-center gap-1 text-warn font-medium">

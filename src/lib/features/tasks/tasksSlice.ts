@@ -8,6 +8,11 @@ import {
   IDeepWorkSession,
   IAdminSubtask,
 } from '@/types/database';
+import {
+  calculateHabitStreak,
+  applyDailyResetToTasks,
+  getLocalDateString,
+} from '@/lib/gamification/streaks';
 
 export interface TasksState {
   items: ITask[];
@@ -41,7 +46,9 @@ export const tasksSlice = createSlice({
   initialState,
   reducers: {
     setTasks: (state, action: PayloadAction<ITask[]>) => {
-      state.items = action.payload;
+      const todayStr = getLocalDateString();
+      const { updatedTasks } = applyDailyResetToTasks(action.payload, todayStr);
+      state.items = updatedTasks as ITask[];
     },
 
     addTask: (state, action: PayloadAction<ITask>) => {
@@ -192,15 +199,11 @@ export const tasksSlice = createSlice({
       const habit = state.items.find((t) => String(t._id) === action.payload);
       if (habit && habit.type === 'HABIT' && habit.habitDetails) {
         habit.completed = !habit.completed;
-        const activeDateStr = new Date().toISOString().split('T')[0];
+        const activeDateStr = getLocalDateString();
         const dates = habit.habitDetails.completedDates || [];
 
         if (habit.completed) {
           habit.completedAt = new Date();
-          habit.habitDetails.streakCount += 1;
-          if (habit.habitDetails.streakCount > habit.habitDetails.bestStreak) {
-            habit.habitDetails.bestStreak = habit.habitDetails.streakCount;
-          }
           habit.habitDetails.lastCompletedDate = activeDateStr;
           if (!dates.includes(activeDateStr)) {
             habit.habitDetails.completedDates = [...dates, activeDateStr];
@@ -220,9 +223,16 @@ export const tasksSlice = createSlice({
           }
         } else {
           habit.completedAt = undefined;
-          habit.habitDetails.streakCount = Math.max(0, habit.habitDetails.streakCount - 1);
           habit.habitDetails.completedDates = dates.filter((d) => d !== activeDateStr);
+          if (habit.habitDetails.lastCompletedDate === activeDateStr) {
+            const remaining = habit.habitDetails.completedDates;
+            habit.habitDetails.lastCompletedDate = remaining.length > 0 ? remaining[remaining.length - 1] : undefined;
+          }
         }
+
+        const { currentStreak, bestStreak } = calculateHabitStreak(habit as any, activeDateStr);
+        habit.habitDetails.streakCount = currentStreak;
+        habit.habitDetails.bestStreak = Math.max(habit.habitDetails.bestStreak || 0, bestStreak);
       }
     },
 
@@ -294,14 +304,10 @@ export const tasksSlice = createSlice({
       if (task.type === 'HABIT' && task.habitDetails) {
         if (task.completed === completed) return;
         task.completed = completed;
-        const activeDateStr = new Date().toISOString().split('T')[0];
+        const activeDateStr = getLocalDateString();
         const dates = task.habitDetails.completedDates || [];
         if (completed) {
           task.completedAt = new Date();
-          task.habitDetails.streakCount += 1;
-          if (task.habitDetails.streakCount > task.habitDetails.bestStreak) {
-            task.habitDetails.bestStreak = task.habitDetails.streakCount;
-          }
           task.habitDetails.lastCompletedDate = activeDateStr;
           if (!dates.includes(activeDateStr)) {
             task.habitDetails.completedDates = [...dates, activeDateStr];
@@ -320,9 +326,16 @@ export const tasksSlice = createSlice({
           }
         } else {
           task.completedAt = undefined;
-          task.habitDetails.streakCount = Math.max(0, task.habitDetails.streakCount - 1);
           task.habitDetails.completedDates = dates.filter((d) => d !== activeDateStr);
+          if (task.habitDetails.lastCompletedDate === activeDateStr) {
+            const remaining = task.habitDetails.completedDates;
+            task.habitDetails.lastCompletedDate = remaining.length > 0 ? remaining[remaining.length - 1] : undefined;
+          }
         }
+
+        const { currentStreak, bestStreak } = calculateHabitStreak(task as any, activeDateStr);
+        task.habitDetails.streakCount = currentStreak;
+        task.habitDetails.bestStreak = Math.max(task.habitDetails.bestStreak || 0, bestStreak);
       } else if (task.type === 'DEEP_WORK') {
         task.completed = completed;
         task.completedAt = completed ? new Date() : undefined;
@@ -451,17 +464,23 @@ export const tasksSlice = createSlice({
       const dates = habit.habitDetails.completedDates || [];
       const exists = dates.includes(dateStr);
 
+      const todayStr = getLocalDateString();
       if (exists) {
         habit.habitDetails.completedDates = dates.filter((d) => d !== dateStr);
-        habit.habitDetails.streakCount = Math.max(0, habit.habitDetails.streakCount - 1);
+        if (habit.habitDetails.lastCompletedDate === dateStr) {
+          const remaining = habit.habitDetails.completedDates;
+          habit.habitDetails.lastCompletedDate = remaining.length > 0 ? remaining[remaining.length - 1] : undefined;
+        }
       } else {
         habit.habitDetails.completedDates = [...dates, dateStr];
-        habit.habitDetails.streakCount += 1;
-        habit.habitDetails.bestStreak = Math.max(
-          habit.habitDetails.bestStreak,
-          habit.habitDetails.streakCount
-        );
+        habit.habitDetails.lastCompletedDate = dateStr;
       }
+
+      habit.completed = habit.habitDetails.completedDates.includes(todayStr);
+
+      const { currentStreak, bestStreak } = calculateHabitStreak(habit as any, todayStr);
+      habit.habitDetails.streakCount = currentStreak;
+      habit.habitDetails.bestStreak = Math.max(habit.habitDetails.bestStreak || 0, bestStreak);
     },
   },
 });

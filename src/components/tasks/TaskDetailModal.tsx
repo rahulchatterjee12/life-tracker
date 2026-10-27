@@ -9,6 +9,7 @@ import {
 import { startTimer } from '@/lib/features/timer/timerSlice';
 import { ITask } from '@/types/database';
 import SwipeToCompleteSlider from '@/components/tasks/SwipeToCompleteSlider';
+import { getMonthlyScheduledDays } from '@/lib/gamification/streaks';
 import {
   X,
   Flame,
@@ -216,9 +217,16 @@ export default function TaskDetailModal({
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-xl bg-surface border border-border-light">
-                    <p className="text-[10px] text-txt-3 uppercase font-medium">Target Goal</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-txt-3 uppercase font-medium">Scheduled Days</p>
+                      {task.habitDetails?.frequency && task.habitDetails.frequency !== 'daily' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium capitalize">
+                          {task.habitDetails.frequency}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm font-semibold text-txt mt-0.5 font-mono">
-                      {task.habitDetails?.monthlyGoal || 31} days/mo
+                      {getMonthlyScheduledDays(task.habitDetails)} days/mo
                     </p>
                   </div>
                   <div className="p-2.5 rounded-xl bg-surface border border-border-light">

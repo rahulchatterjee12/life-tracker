@@ -5,6 +5,7 @@ import {
   calculateHabitPoints,
   calculateAdminPoints,
 } from '@/lib/gamification/engine';
+import { calculateHabitStreak, getLocalDateString } from '@/lib/gamification/streaks';
 
 export async function POST(request: Request) {
   try {
@@ -65,7 +66,26 @@ export async function POST(request: Request) {
         sessions: sessions || [],
       };
     } else if (task.type === 'HABIT') {
-      const currentStreak = (task.habitDetails?.streakCount || 0) + 1;
+      const todayStr = getLocalDateString(completedAt);
+      if (task.habitDetails) {
+        if (!task.habitDetails.completedDates) {
+          task.habitDetails.completedDates = [];
+        }
+        if (!task.habitDetails.completedDates.includes(todayStr)) {
+          task.habitDetails.completedDates.push(todayStr);
+        }
+        task.habitDetails.lastCompletedDate = todayStr;
+      }
+      task.completed = true;
+
+      // Calculate mathematically accurate streak from habit schedule and dates
+      const { currentStreak, bestStreak } = calculateHabitStreak(task, todayStr);
+
+      if (task.habitDetails) {
+        task.habitDetails.streakCount = currentStreak;
+        task.habitDetails.bestStreak = Math.max(task.habitDetails.bestStreak || 0, bestStreak);
+      }
+
       const result = calculateHabitPoints({
         importance: task.importance,
         streakCount: currentStreak,
@@ -79,21 +99,6 @@ export async function POST(request: Request) {
       metadata.streakCount = currentStreak;
       metadata.streakMultiplier = result.streakMultiplier;
       metadata.breakdown = result.breakdown;
-
-      if (task.habitDetails) {
-        task.habitDetails.streakCount = currentStreak;
-        if (currentStreak > (task.habitDetails.bestStreak || 0)) {
-          task.habitDetails.bestStreak = currentStreak;
-        }
-        const todayStr = completedAt.toISOString().split('T')[0];
-        task.habitDetails.lastCompletedDate = todayStr;
-        if (!task.habitDetails.completedDates) {
-          task.habitDetails.completedDates = [];
-        }
-        if (!task.habitDetails.completedDates.includes(todayStr)) {
-          task.habitDetails.completedDates.push(todayStr);
-        }
-      }
     } else if (task.type === 'ADMIN') {
       const totalSubtasks = task.adminDetails?.subtasks?.length || 0;
       const completedSubtasks =
@@ -123,10 +128,24 @@ export async function POST(request: Request) {
     }
     await task.save();
 
-    // Update user point balances
+    // Update user point balances and user streak
     user.vaultBalance += pointsAwarded;
     user.totalPointsEarned += pointsAwarded;
-    user.lastActiveDate = completedAt.toISOString().split('T')[0];
+
+    const todayStr = getLocalDateString(completedAt);
+    const yesterday = new Date(completedAt);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = getLocalDateString(yesterday);
+
+    if (user.lastActiveDate === todayStr) {
+      // Already active today; streak maintained
+    } else if (user.lastActiveDate === yesterdayStr) {
+      user.currentStreak = (user.currentStreak || 0) + 1;
+    } else {
+      user.currentStreak = 1;
+    }
+    user.longestStreak = Math.max(user.longestStreak || 0, user.currentStreak);
+    user.lastActiveDate = todayStr;
     await user.save();
 
     // Log double-entry ledger transaction
@@ -146,6 +165,8 @@ export async function POST(request: Request) {
       user: {
         vaultBalance: user.vaultBalance,
         totalPointsEarned: user.totalPointsEarned,
+        currentStreak: user.currentStreak,
+        longestStreak: user.longestStreak,
       },
       pointsAwarded,
       transaction,

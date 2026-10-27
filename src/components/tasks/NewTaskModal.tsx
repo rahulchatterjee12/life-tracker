@@ -10,6 +10,7 @@ import {
   addAdminTask,
 } from '@/lib/features/tasks/tasksSlice';
 import { TaskType, TaskImportance, HabitFrequency, AdminRecurringCycle } from '@/types/database';
+import { getMonthlyScheduledDays } from '@/lib/gamification/streaks';
 import { X, Calendar, Clock, Flame, Link as LinkIcon } from 'lucide-react';
 
 const WEEK_DAYS = [
@@ -169,7 +170,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
         customDays: selectedDays,
         streakCount: 0,
         bestStreak: 0,
-        monthlyGoal: isAllDays ? 31 : Math.round((selectedDays.length / 7) * 31),
+        monthlyGoal: getMonthlyScheduledDays({ frequency: computedFreq, customDays: selectedDays }),
         nextTaskId: nextTaskId || undefined,
       };
     } else if (type === 'ADMIN') {

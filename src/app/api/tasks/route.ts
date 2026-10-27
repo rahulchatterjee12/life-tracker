@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, Task, User } from '@/models';
 import { getSession } from '@/lib/auth';
+import { applyDailyResetToTasks, calculateUserStreak, getLocalDateString } from '@/lib/gamification/streaks';
 
 const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
 
@@ -33,16 +34,46 @@ async function getTargetUser() {
   return user;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await connectToDatabase();
     const user = await getTargetUser();
+    const { searchParams } = new URL(request.url);
+    const clientToday = searchParams.get('today');
+    const todayStr = clientToday && /^\d{4}-\d{2}-\d{2}$/.test(clientToday) ? clientToday : getLocalDateString();
+
     const tasks = await Task.find({ userId: user._id }).sort({ createdAt: -1 });
+
+    // Apply daily reset and recalculate streaks dynamically for all tasks
+    const { updatedTasks, modifiedCount } = applyDailyResetToTasks(tasks as any[], todayStr);
+
+    if (modifiedCount > 0) {
+      await Promise.all(
+        (updatedTasks as any[]).map((t) => {
+          if (t && typeof t.isModified === 'function' && t.isModified()) {
+            return t.save();
+          }
+          return Promise.resolve();
+        })
+      );
+    }
+
+    // Check user active streak status
+    const userStreakInfo = calculateUserStreak(
+      user.lastActiveDate,
+      user.currentStreak,
+      user.longestStreak,
+      todayStr
+    );
+    if (user.currentStreak !== userStreakInfo.currentStreak) {
+      user.currentStreak = userStreakInfo.currentStreak;
+      await user.save();
+    }
 
     return NextResponse.json({
       success: true,
       user,
-      tasks,
+      tasks: updatedTasks,
     });
   } catch (error) {
     console.error('Failed to fetch tasks:', error);

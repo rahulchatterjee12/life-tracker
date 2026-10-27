@@ -61,7 +61,8 @@ export default function Home() {
   useEffect(() => {
     async function loadDatabaseTasks() {
       try {
-        const res = await fetch('/api/tasks');
+        const clientToday = new Date().toLocaleDateString('en-CA');
+        const res = await fetch(`/api/tasks?today=${encodeURIComponent(clientToday)}`);
         const data = await res.json();
         if (data.success && Array.isArray(data.tasks)) {
           dispatch(setTasks(data.tasks));
