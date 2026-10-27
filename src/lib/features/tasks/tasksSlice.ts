@@ -41,6 +41,26 @@ const initialState: TasksState = {
   error: null,
 };
 
+export interface UpdateTaskPayload {
+  id?: string;
+  _id?: string | import('mongoose').Types.ObjectId;
+  title?: string;
+  description?: string;
+  url?: string;
+  importance?: TaskImportance;
+  isFrog?: boolean;
+  type?: TaskType;
+  completed?: boolean;
+  completedAt?: Date;
+  pointsAwarded?: number;
+  completionHistory?: import('@/types/database').ITaskCompletionEvent[];
+  habitDetails?: Partial<import('@/types/database').IHabitDetails>;
+  deepWorkDetails?: Partial<import('@/types/database').IDeepWorkDetails>;
+  adminDetails?: Partial<Omit<import('@/types/database').IAdminDetails, 'dueDate'>> & {
+    dueDate?: Date | string;
+  };
+}
+
 export const tasksSlice = createSlice({
   name: 'tasks',
   initialState,
@@ -366,44 +386,25 @@ export const tasksSlice = createSlice({
       }
     },
 
-    updateTask: (
-      state,
-      action: PayloadAction<{
-        id: string;
-        title: string;
-        description?: string;
-        url?: string;
-        importance?: TaskImportance;
-        isFrog?: boolean;
-        type?: TaskType;
-        habitDetails?: {
-          frequency?: HabitFrequency;
-          customDays?: number[];
-          monthlyGoal?: number;
-          streakCount?: number;
-          bestStreak?: number;
-          nextTaskId?: string;
-        };
-        deepWorkDetails?: {
-          targetDurationMinutes?: number;
-        };
-        adminDetails?: {
-          dueDate?: string;
-          isRecurring?: boolean;
-          recurringCycle?: AdminRecurringCycle;
-        };
-      }>
-    ) => {
-      const task = state.items.find((t) => String(t._id) === action.payload.id);
+    updateTask: (state, action: PayloadAction<UpdateTaskPayload>) => {
+      const targetId =
+        action.payload.id ||
+        (action.payload._id ? String(action.payload._id) : undefined);
+      if (!targetId) return;
+
+      const task = state.items.find((t) => String(t._id) === targetId);
       if (!task) return;
 
-      task.title = action.payload.title;
-      task.description = action.payload.description;
-      if (action.payload.url !== undefined) {
-        task.url = action.payload.url;
-      }
-      if (action.payload.importance !== undefined) {
-        task.importance = action.payload.importance;
+      if (action.payload.title !== undefined) task.title = action.payload.title;
+      if (action.payload.description !== undefined) task.description = action.payload.description;
+      if (action.payload.url !== undefined) task.url = action.payload.url;
+      if (action.payload.importance !== undefined) task.importance = action.payload.importance;
+      if (action.payload.type !== undefined) task.type = action.payload.type;
+      if (action.payload.completed !== undefined) task.completed = action.payload.completed;
+      if (action.payload.completedAt !== undefined) task.completedAt = action.payload.completedAt;
+      if (action.payload.pointsAwarded !== undefined) task.pointsAwarded = action.payload.pointsAwarded;
+      if (action.payload.completionHistory !== undefined) {
+        task.completionHistory = action.payload.completionHistory;
       }
 
       if (action.payload.isFrog !== undefined) {
@@ -416,37 +417,44 @@ export const tasksSlice = createSlice({
         task.isFrog = action.payload.isFrog;
       }
 
-      if (action.payload.habitDetails && task.habitDetails) {
-        if (action.payload.habitDetails.frequency) {
-          task.habitDetails.frequency = action.payload.habitDetails.frequency;
-        }
-        if (action.payload.habitDetails.customDays !== undefined) {
-          task.habitDetails.customDays = action.payload.habitDetails.customDays;
-        }
-        if (action.payload.habitDetails.monthlyGoal !== undefined) {
-          task.habitDetails.monthlyGoal = action.payload.habitDetails.monthlyGoal;
-        }
-        if (action.payload.habitDetails.nextTaskId !== undefined) {
-          task.habitDetails.nextTaskId = action.payload.habitDetails.nextTaskId;
-        }
+      if (action.payload.habitDetails) {
+        task.habitDetails = {
+          frequency: 'daily',
+          customDays: [],
+          streakCount: 0,
+          bestStreak: 0,
+          completedDates: [],
+          ...task.habitDetails,
+          ...action.payload.habitDetails,
+        };
       }
 
-      if (action.payload.deepWorkDetails && task.deepWorkDetails) {
-        if (action.payload.deepWorkDetails.targetDurationMinutes) {
-          task.deepWorkDetails.targetDurationMinutes = action.payload.deepWorkDetails.targetDurationMinutes;
-        }
+      if (action.payload.deepWorkDetails) {
+        task.deepWorkDetails = {
+          targetDurationMinutes: 45,
+          actualDurationSeconds: 0,
+          isLiveTracked: false,
+          overtimeBonusAwarded: false,
+          overtimeSeconds: 0,
+          sessions: [],
+          ...task.deepWorkDetails,
+          ...action.payload.deepWorkDetails,
+        };
       }
 
-      if (action.payload.adminDetails && task.adminDetails) {
-        if (action.payload.adminDetails.dueDate) {
-          task.adminDetails.dueDate = new Date(action.payload.adminDetails.dueDate);
-        }
-        if (action.payload.adminDetails.isRecurring !== undefined) {
-          task.adminDetails.isRecurring = action.payload.adminDetails.isRecurring;
-        }
-        if (action.payload.adminDetails.recurringCycle) {
-          task.adminDetails.recurringCycle = action.payload.adminDetails.recurringCycle;
-        }
+      if (action.payload.adminDetails) {
+        const resolvedDueDate = action.payload.adminDetails.dueDate
+          ? new Date(action.payload.adminDetails.dueDate)
+          : task.adminDetails?.dueDate || new Date();
+        const { dueDate: _, ...otherAdminDetails } = action.payload.adminDetails;
+        task.adminDetails = {
+          dueDate: resolvedDueDate,
+          isRecurring: false,
+          recurringCycle: 'none',
+          subtasks: [],
+          ...task.adminDetails,
+          ...otherAdminDetails,
+        };
       }
 
       task.updatedAt = new Date();
