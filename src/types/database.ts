@@ -46,6 +46,7 @@ export interface IUser {
   email: string;
   name: string;
   password?: string;
+  isEmailVerified?: boolean;
   totalPointsEarned: number;
   vaultBalance: number;
   currentStreak: number;

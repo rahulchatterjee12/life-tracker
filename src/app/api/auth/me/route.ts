@@ -22,11 +22,15 @@ export async function GET() {
         id: String(user._id),
         email: user.email,
         name: user.name,
+        isEmailVerified: user.isEmailVerified ?? true,
         vaultBalance: user.vaultBalance,
         totalPointsEarned: user.totalPointsEarned,
         currentStreak: user.currentStreak,
+        longestStreak: user.longestStreak,
         streakFreezesCount: user.streakFreezesCount,
+        currencyPeg: user.currencyPeg,
         badges: user.badges,
+        createdAt: user.createdAt,
       },
     });
   } catch (error: unknown) {

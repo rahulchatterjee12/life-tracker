@@ -17,6 +17,7 @@ import TaskDetailModal from '@/components/tasks/TaskDetailModal';
 import RetrospectiveModal from '@/components/retrospective/RetrospectiveModal';
 import AuthModal from '@/components/auth/AuthModal';
 import HabitMatrixView from '@/components/analytics/HabitMatrixView';
+import UserProfileView from '@/components/profile/UserProfileView';
 import { useState, useEffect } from 'react';
 import {
   Flame,
@@ -39,9 +40,10 @@ import {
   LogOut,
   Grid3X3,
   ListTodo,
+  User as UserIcon,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'manage' | 'vault';
+type View = 'dashboard' | 'manage' | 'vault' | 'profile';
 
 export default function Home() {
   const { theme, toggle } = useTheme();
@@ -157,6 +159,7 @@ export default function Home() {
     { id: 'dashboard' as View, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'manage' as View, label: 'Manage Tasks', icon: ListTodo },
     { id: 'vault' as View, label: 'The Vault', icon: Wallet },
+    { id: 'profile' as View, label: 'Profile & Security', icon: UserIcon },
   ];
 
   return (
@@ -249,12 +252,16 @@ export default function Home() {
         <div className="px-5 py-3 border-t border-border">
           {user ? (
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs font-semibold shrink-0">
+              <div
+                onClick={() => setView('profile')}
+                className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-85 transition group"
+                title="View Profile & Security"
+              >
+                <div className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center text-xs font-semibold shrink-0 group-hover:ring-2 ring-accent/30 transition">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-txt truncate">{user.name}</p>
+                  <p className="text-xs font-medium text-txt truncate group-hover:text-accent transition">{user.name}</p>
                   <p className="text-[10px] text-txt-3 truncate">{user.email}</p>
                 </div>
               </div>
@@ -292,9 +299,13 @@ export default function Home() {
         <div className="flex items-center gap-2">
           {user ? (
             <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-[10px] font-semibold">
+              <button
+                onClick={() => setView('profile')}
+                className="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center text-[10px] font-semibold cursor-pointer hover:ring-2 ring-accent/30 transition"
+                title="View Profile & Security"
+              >
                 {user.name.charAt(0).toUpperCase()}
-              </div>
+              </button>
               <button onClick={logout} className="text-txt-3 hover:text-bad p-1 cursor-pointer" title="Log Out">
                 <LogOut className="w-3.5 h-3.5" />
               </button>
@@ -709,7 +720,7 @@ export default function Home() {
           ) : view === 'manage' ? (
             /* === MANAGE TASKS & HABITS VIEW === */
             <TaskManagerView />
-          ) : (
+          ) : view === 'vault' ? (
             /* === VAULT VIEW === */
             <>
               <div className="flex items-center justify-between">
@@ -790,6 +801,9 @@ export default function Home() {
                 </div>
               </section>
             </>
+          ) : (
+            /* === USER PROFILE & SECURITY VIEW === */
+            <UserProfileView />
           )}
         </div>
       </main>

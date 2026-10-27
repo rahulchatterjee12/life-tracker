@@ -4,4 +4,5 @@ export { User } from './User';
 export { Task } from './Task';
 export { VaultReward } from './VaultReward';
 export { Transaction } from './Transaction';
+export { OtpVerification } from './OtpVerification';
 
