@@ -17,6 +17,14 @@ export interface TaskLike {
   completed?: boolean;
   completedAt?: Date | string;
   createdAt?: Date | string;
+  completionHistory?: Array<{
+    completedAt: Date | string;
+    dateStr: string;
+    pointsAwarded?: number;
+    durationSeconds?: number;
+    subtasksCompletedCount?: number;
+    isFrog?: boolean;
+  }>;
   habitDetails?: HabitDetailsLike;
   adminDetails?: {
     dueDate?: Date | string;
@@ -126,6 +134,11 @@ export function calculateHabitStreak(
   const todayDate = new Date(`${todayStr}T00:00:00`);
 
   const completedSet = new Set<string>(task.habitDetails.completedDates || []);
+  if (task.completionHistory && Array.isArray(task.completionHistory)) {
+    task.completionHistory.forEach((ev) => {
+      if (ev.dateStr) completedSet.add(ev.dateStr);
+    });
+  }
   if (task.completed || task.habitDetails.lastCompletedDate === todayStr) {
     completedSet.add(todayStr);
   }
@@ -274,6 +287,7 @@ export function applyDailyResetToTasks<T extends TaskLike>(
     if (task.type === 'HABIT') {
       const isCompletedToday =
         task.habitDetails?.completedDates?.includes(todayStr) === true ||
+        task.completionHistory?.some((e) => e.dateStr === todayStr) === true ||
         (task.habitDetails?.lastCompletedDate === todayStr && task.completed === true);
 
       // Check if task was completed on a previous day and needs daily reset to false

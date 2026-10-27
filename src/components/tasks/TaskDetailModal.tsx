@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppDispatch } from '@/lib/hooks';
 import {
   setTaskCompletionStatus,
+  updateTask,
   toggleAdminSubtask,
 } from '@/lib/features/tasks/tasksSlice';
+import { setUserVaultStats } from '@/lib/features/vault/vaultSlice';
 import { startTimer } from '@/lib/features/timer/timerSlice';
 import { ITask } from '@/types/database';
 import SwipeToCompleteSlider from '@/components/tasks/SwipeToCompleteSlider';
@@ -45,12 +47,12 @@ export default function TaskDetailModal({
   const isAdmin = task.type === 'ADMIN';
 
   const handleComplete = async () => {
-    // 1. Synchronously update Redux state
+    // 1. Optimistically update Redux state
     dispatch(setTaskCompletionStatus({ taskId, completed: true }));
 
-    // 2. Call backend gamification API to award points, record streak & transactions
+    // 2. Persist completion event and timestamp to backend
     try {
-      await fetch('/api/tasks/complete', {
+      const res = await fetch('/api/tasks/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -62,21 +64,38 @@ export default function TaskDetailModal({
           isLiveTracked: false,
         }),
       });
-    } catch {
-      // Local state is already updated
+      const data = await res.json();
+      if (data.success && data.task) {
+        dispatch(updateTask(data.task));
+        if (data.user) {
+          dispatch(
+            setUserVaultStats({
+              vaultBalance: data.user.vaultBalance,
+              totalPointsEarned: data.user.totalPointsEarned,
+              streakFreezesCount: data.user.streakFreezesCount,
+            })
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to persist task completion:', err);
     }
   };
 
   const handleReset = async () => {
     dispatch(setTaskCompletionStatus({ taskId, completed: false }));
     try {
-      await fetch('/api/tasks', {
+      const res = await fetch('/api/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: taskId, completed: false }),
       });
-    } catch {
-      // Local state is already updated
+      const data = await res.json();
+      if (data.success && data.task) {
+        dispatch(updateTask(data.task));
+      }
+    } catch (err) {
+      console.error('Failed to reset task completion on server:', err);
     }
   };
 
@@ -201,6 +220,18 @@ export default function TaskDetailModal({
                 </>
               )}
             </div>
+
+            {task.completed && task.completedAt && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-ok/10 border border-ok/20 text-xs text-ok font-medium font-mono">
+                <Clock className="w-3.5 h-3.5" />
+                <span>
+                  {new Date(task.completedAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Category-Specific Deep Dive Card */}
@@ -316,6 +347,41 @@ export default function TaskDetailModal({
               </div>
             )}
           </div>
+
+          {/* Historical Completion Log & Timestamps */}
+          {task.completionHistory && task.completionHistory.length > 0 && (
+            <div className="p-3.5 rounded-2xl bg-surface-2/40 border border-border-light space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-txt flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-ok" />
+                  Historical Completion Log ({task.completionHistory.length})
+                </span>
+                <span className="text-[10px] text-txt-3">Recorded timestamps</span>
+              </div>
+              <div className="max-h-24 overflow-y-auto space-y-1.5 pr-1">
+                {[...task.completionHistory].reverse().map((ev, idx) => (
+                  <div
+                    key={ev._id || idx}
+                    className="flex items-center justify-between text-[11px] py-1 px-2.5 rounded-lg bg-surface border border-border-light/60 font-mono"
+                  >
+                    <span className="text-txt-2">{ev.dateStr}</span>
+                    <span className="text-txt-3">
+                      {new Date(ev.completedAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>
+                    {ev.pointsAwarded ? (
+                      <span className="text-ok font-medium">+{ev.pointsAwarded} pts</span>
+                    ) : (
+                      <span className="text-ok font-medium">Done</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* === INTERACTIVE SWIPE-TO-COMPLETE SLIDER === */}
           <div className="pt-2">

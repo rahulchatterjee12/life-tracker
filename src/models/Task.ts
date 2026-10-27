@@ -1,12 +1,26 @@
 import { Schema, model, models, Model } from 'mongoose';
 import {
   ITask,
+  ITaskCompletionEvent,
   IDeepWorkDetails,
   IHabitDetails,
   IAdminDetails,
   IDeepWorkSession,
   IAdminSubtask,
 } from '@/types/database';
+
+const CompletionEventSchema = new Schema<ITaskCompletionEvent>(
+  {
+    completedAt: { type: Date, required: true },
+    dateStr: { type: String, required: true }, // YYYY-MM-DD
+    pointsAwarded: { type: Number, default: 0 },
+    durationSeconds: { type: Number },
+    subtasksCompletedCount: { type: Number },
+    isFrog: { type: Boolean, default: false },
+    note: { type: String },
+  },
+  { _id: true, timestamps: true }
+);
 
 const DeepWorkSessionSchema = new Schema<IDeepWorkSession>(
   {
@@ -96,6 +110,7 @@ const TaskSchema = new Schema<ITask>(
     completed: { type: Boolean, default: false, index: true },
     completedAt: { type: Date },
     pointsAwarded: { type: Number, default: 0 },
+    completionHistory: { type: [CompletionEventSchema], default: [] },
 
     // Type-specific subdocuments
     deepWorkDetails: { type: DeepWorkDetailsSchema },
@@ -111,6 +126,9 @@ const TaskSchema = new Schema<ITask>(
 TaskSchema.index({ userId: 1, completed: 1, type: 1 });
 TaskSchema.index({ userId: 1, isFrog: 1 });
 
-export const Task: Model<ITask> = models.Task || model<ITask>('Task', TaskSchema);
+if (models.Task) {
+  delete (models as Record<string, unknown>).Task;
+}
+export const Task: Model<ITask> = model<ITask>('Task', TaskSchema);
 export default Task;
 

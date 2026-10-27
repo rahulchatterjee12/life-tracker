@@ -34,7 +34,13 @@ export default function HabitStackModal() {
         })
       );
     } else if (nextTask.type === 'HABIT') {
-      dispatch(toggleHabitCompletion(String(nextTask._id)));
+      const nextTaskId = String(nextTask._id);
+      dispatch(toggleHabitCompletion(nextTaskId));
+      fetch('/api/tasks/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: nextTaskId }),
+      }).catch((err) => console.error('Failed to complete stacked habit:', err));
     }
 
     dispatch(closeHabitStackModal());

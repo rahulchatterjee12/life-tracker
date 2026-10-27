@@ -1,24 +1,44 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, Task, User, Transaction } from '@/models';
+import { getSession } from '@/lib/auth';
 import {
   calculateDeepWorkPoints,
   calculateHabitPoints,
   calculateAdminPoints,
 } from '@/lib/gamification/engine';
 import { calculateHabitStreak, getLocalDateString } from '@/lib/gamification/streaks';
+import { ITaskCompletionEvent } from '@/types/database';
+
+const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
 
 export async function POST(request: Request) {
   try {
     await connectToDatabase();
     const body = await request.json();
-    const { taskId, actualDurationSeconds, isLiveTracked, sessions } = body;
+    const { taskId, actualDurationSeconds, isLiveTracked, sessions, completedAt: clientCompletedAt } = body;
+
+    if (!taskId) {
+      return NextResponse.json({ success: false, error: 'Task ID is required' }, { status: 400 });
+    }
 
     const task = await Task.findById(taskId);
     if (!task) {
       return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
     }
 
-    const user = await User.findById(task.userId);
+    let user = await User.findById(task.userId);
+    if (!user) {
+      const session = await getSession();
+      if (session?.userId) {
+        user = await User.findById(session.userId);
+      }
+    }
+    if (!user) {
+      user = await User.findOne({ email: DEFAULT_USER_EMAIL });
+    }
+    if (!user) {
+      user = await User.findOne();
+    }
     if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
@@ -31,7 +51,8 @@ export async function POST(request: Request) {
       isFrog: task.isFrog,
     };
 
-    const completedAt = new Date();
+    const completedAt = clientCompletedAt ? new Date(clientCompletedAt) : new Date();
+    const todayStr = getLocalDateString(completedAt);
 
     if (task.type === 'DEEP_WORK') {
       const targetMinutes = task.deepWorkDetails?.targetDurationMinutes || 30;
@@ -66,7 +87,6 @@ export async function POST(request: Request) {
         sessions: sessions || [],
       };
     } else if (task.type === 'HABIT') {
-      const todayStr = getLocalDateString(completedAt);
       if (task.habitDetails) {
         if (!task.habitDetails.completedDates) {
           task.habitDetails.completedDates = [];
@@ -119,6 +139,33 @@ export async function POST(request: Request) {
       metadata.breakdown = result.breakdown;
     }
 
+    // Record completion event in historical log with timestamp
+    const completionEvent: ITaskCompletionEvent = {
+      completedAt,
+      dateStr: todayStr,
+      pointsAwarded,
+      durationSeconds:
+        task.type === 'DEEP_WORK'
+          ? (actualDurationSeconds || (task.deepWorkDetails?.targetDurationMinutes || 45) * 60)
+          : undefined,
+      subtasksCompletedCount:
+        task.type === 'ADMIN'
+          ? (task.adminDetails?.subtasks?.filter((s) => s.completed).length || 0)
+          : undefined,
+      isFrog: Boolean(task.isFrog),
+    };
+
+    if (!task.completionHistory) {
+      task.completionHistory = [];
+    }
+
+    const existingIdx = task.completionHistory.findIndex((e) => e.dateStr === todayStr);
+    if (existingIdx >= 0) {
+      task.completionHistory[existingIdx] = completionEvent as any;
+    } else {
+      task.completionHistory.push(completionEvent as any);
+    }
+
     // Mark task completed
     task.completed = true;
     task.completedAt = completedAt;
@@ -126,13 +173,18 @@ export async function POST(request: Request) {
     if (task.isFrog) {
       task.frogCompletedBeforeNoon = completedAt.getHours() < 12;
     }
+
+    task.markModified('completionHistory');
+    if (task.type === 'HABIT') {
+      task.markModified('habitDetails');
+      task.markModified('habitDetails.completedDates');
+    }
     await task.save();
 
     // Update user point balances and user streak
     user.vaultBalance += pointsAwarded;
     user.totalPointsEarned += pointsAwarded;
 
-    const todayStr = getLocalDateString(completedAt);
     const yesterday = new Date(completedAt);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = getLocalDateString(yesterday);

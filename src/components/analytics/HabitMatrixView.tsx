@@ -105,11 +105,13 @@ export default function HabitMatrixView() {
       return Boolean(
         habit.completed ||
         habit.habitDetails?.completedDates?.includes(dateStr) ||
+        habit.completionHistory?.some((e) => e.dateStr === dateStr) ||
         habit.habitDetails?.lastCompletedDate === dateStr
       );
     }
     return Boolean(
       habit.habitDetails?.completedDates?.includes(dateStr) ||
+      habit.completionHistory?.some((e) => e.dateStr === dateStr) ||
       habit.habitDetails?.lastCompletedDate === dateStr
     );
   };

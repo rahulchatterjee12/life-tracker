@@ -104,6 +104,18 @@ export interface IAdminDetails {
   subtasks: IAdminSubtask[];
 }
 
+// ================= COMPLETION HISTORY =================
+export interface ITaskCompletionEvent {
+  _id?: string;
+  completedAt: Date;
+  dateStr: string; // YYYY-MM-DD local date
+  pointsAwarded?: number;
+  durationSeconds?: number;
+  subtasksCompletedCount?: number;
+  isFrog?: boolean;
+  note?: string;
+}
+
 // ================= TASK BASE =================
 export interface ITask {
   _id?: Types.ObjectId;
@@ -118,6 +130,7 @@ export interface ITask {
   completed: boolean;
   completedAt?: Date;
   pointsAwarded: number;
+  completionHistory?: ITaskCompletionEvent[];
   deepWorkDetails?: IDeepWorkDetails;
   habitDetails?: IHabitDetails;
   adminDetails?: IAdminDetails;

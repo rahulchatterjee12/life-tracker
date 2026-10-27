@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, Task, User } from '@/models';
 import { getSession } from '@/lib/auth';
-import { applyDailyResetToTasks, calculateUserStreak, getLocalDateString } from '@/lib/gamification/streaks';
+import {
+  applyDailyResetToTasks,
+  calculateHabitStreak,
+  calculateUserStreak,
+  getLocalDateString,
+} from '@/lib/gamification/streaks';
+import { ITaskCompletionEvent } from '@/types/database';
 
 const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
 
@@ -118,7 +124,6 @@ export async function PUT(request: Request) {
     await connectToDatabase();
     const body = await request.json();
     const { id, ...updates } = body;
-    const user = await getTargetUser();
 
     if (!id) {
       return NextResponse.json(
@@ -127,19 +132,130 @@ export async function PUT(request: Request) {
       );
     }
 
-    if (updates.isFrog) {
-      await Task.updateMany({ userId: user._id, isFrog: true }, { isFrog: false });
+    const task = await Task.findById(id);
+    if (!task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found' },
+        { status: 404 }
+      );
     }
 
-    const updatedTask = await Task.findOneAndUpdate(
-      { _id: id, userId: user._id },
-      { ...updates, updatedAt: new Date() },
-      { new: true }
-    );
+    if (updates.isFrog) {
+      await Task.updateMany({ userId: task.userId, isFrog: true }, { isFrog: false });
+    }
+
+    const todayStr = getLocalDateString();
+
+    // If updating completion status
+    if (updates.completed === false) {
+      task.completed = false;
+      task.completedAt = undefined;
+
+      // Remove today from habit completed dates
+      if (task.type === 'HABIT' && task.habitDetails) {
+        if (task.habitDetails.completedDates) {
+          task.habitDetails.completedDates = task.habitDetails.completedDates.filter(
+            (d) => d !== todayStr
+          );
+        }
+        if (task.habitDetails.lastCompletedDate === todayStr) {
+          const remaining = task.habitDetails.completedDates || [];
+          task.habitDetails.lastCompletedDate =
+            remaining.length > 0 ? remaining[remaining.length - 1] : undefined;
+        }
+      }
+
+      // Remove today's event from completion history
+      if (task.completionHistory) {
+        task.completionHistory = task.completionHistory.filter((e) => e.dateStr !== todayStr);
+      }
+
+      // Recalculate streak
+      if (task.type === 'HABIT') {
+        const { currentStreak, bestStreak } = calculateHabitStreak(task, todayStr);
+        if (task.habitDetails) {
+          task.habitDetails.streakCount = currentStreak;
+          task.habitDetails.bestStreak = Math.max(task.habitDetails.bestStreak || 0, bestStreak);
+        }
+      }
+
+      task.markModified('completionHistory');
+      task.markModified('habitDetails');
+      task.markModified('habitDetails.completedDates');
+    } else if (updates.completed === true) {
+      task.completed = true;
+      task.completedAt = new Date();
+
+      const completionEvent: ITaskCompletionEvent = {
+        completedAt: task.completedAt,
+        dateStr: todayStr,
+        pointsAwarded: updates.pointsAwarded || task.pointsAwarded || 25,
+        isFrog: Boolean(task.isFrog),
+      };
+
+      if (!task.completionHistory) {
+        task.completionHistory = [];
+      }
+      const existingIdx = task.completionHistory.findIndex((e) => e.dateStr === todayStr);
+      if (existingIdx >= 0) {
+        task.completionHistory[existingIdx] = completionEvent as any;
+      } else {
+        task.completionHistory.push(completionEvent as any);
+      }
+
+      if (task.type === 'HABIT' && task.habitDetails) {
+        if (!task.habitDetails.completedDates) {
+          task.habitDetails.completedDates = [];
+        }
+        if (!task.habitDetails.completedDates.includes(todayStr)) {
+          task.habitDetails.completedDates.push(todayStr);
+        }
+        task.habitDetails.lastCompletedDate = todayStr;
+
+        const { currentStreak, bestStreak } = calculateHabitStreak(task, todayStr);
+        task.habitDetails.streakCount = currentStreak;
+        task.habitDetails.bestStreak = Math.max(task.habitDetails.bestStreak || 0, bestStreak);
+      }
+
+      task.markModified('completionHistory');
+      task.markModified('habitDetails');
+      task.markModified('habitDetails.completedDates');
+    }
+
+    // Apply standard updates (title, description, url, importance, details)
+    if (updates.title !== undefined) task.title = updates.title;
+    if (updates.description !== undefined) task.description = updates.description;
+    if (updates.url !== undefined) task.url = updates.url;
+    if (updates.importance !== undefined) task.importance = updates.importance;
+    if (updates.isFrog !== undefined) task.isFrog = updates.isFrog;
+
+    if (updates.habitDetails && task.habitDetails) {
+      if (updates.habitDetails.frequency) task.habitDetails.frequency = updates.habitDetails.frequency;
+      if (updates.habitDetails.customDays) task.habitDetails.customDays = updates.habitDetails.customDays;
+      if (updates.habitDetails.monthlyGoal) task.habitDetails.monthlyGoal = updates.habitDetails.monthlyGoal;
+      if (updates.habitDetails.nextTaskId !== undefined) task.habitDetails.nextTaskId = updates.habitDetails.nextTaskId;
+      task.markModified('habitDetails');
+    }
+    if (updates.adminDetails && task.adminDetails) {
+      if (updates.adminDetails.dueDate) task.adminDetails.dueDate = updates.adminDetails.dueDate;
+      if (updates.adminDetails.isRecurring !== undefined) task.adminDetails.isRecurring = updates.adminDetails.isRecurring;
+      if (updates.adminDetails.recurringCycle) task.adminDetails.recurringCycle = updates.adminDetails.recurringCycle;
+      if (updates.adminDetails.subtasks) task.adminDetails.subtasks = updates.adminDetails.subtasks;
+      task.markModified('adminDetails');
+    }
+    if (updates.deepWorkDetails && task.deepWorkDetails) {
+      if (updates.deepWorkDetails.targetDurationMinutes) {
+        task.deepWorkDetails.targetDurationMinutes = updates.deepWorkDetails.targetDurationMinutes;
+      }
+      task.markModified('deepWorkDetails');
+    }
+
+    task.updatedAt = new Date();
+    await task.save();
 
     return NextResponse.json({
       success: true,
-      task: updatedTask,
+      task,
     });
   } catch (error) {
     console.error('Failed to update task:', error);
@@ -155,7 +271,6 @@ export async function DELETE(request: Request) {
     await connectToDatabase();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const user = await getTargetUser();
 
     if (!id) {
       return NextResponse.json(
@@ -164,7 +279,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await Task.findOneAndDelete({ _id: id, userId: user._id });
+    await Task.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,
