@@ -139,7 +139,13 @@ export function calculateHabitStreak(
       if (ev.dateStr) completedSet.add(ev.dateStr);
     });
   }
-  if (task.completed || task.habitDetails.lastCompletedDate === todayStr) {
+  const isDoneTodayExplicitly =
+    task.habitDetails.completedDates?.includes(todayStr) === true ||
+    task.completionHistory?.some((e) => e.dateStr === todayStr) === true ||
+    task.habitDetails.lastCompletedDate === todayStr ||
+    Boolean(task.completed && task.completedAt && getLocalDateString(new Date(task.completedAt)) === todayStr);
+
+  if (isDoneTodayExplicitly) {
     completedSet.add(todayStr);
   }
 
@@ -319,39 +325,48 @@ export function applyDailyResetToTasks<T extends TaskLike>(
 
       if (task.completed && completedAt) {
         const completedStr = getLocalDateString(completedAt);
-        let shouldReset = false;
+        if (completedStr !== todayStr) {
+          let shouldReset = false;
+          const todayDate = new Date(`${todayStr}T00:00:00`);
 
-        if (cycle === 'weekly') {
-          // Check if completed in a previous calendar week (Sunday start)
-          const todayDate = new Date(`${todayStr}T00:00:00`);
-          const diffTime = todayDate.getTime() - completedAt.getTime();
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          shouldReset = diffDays >= 7 || todayDate.getDay() < completedAt.getDay();
-        } else if (cycle === 'monthly') {
-          const todayDate = new Date(`${todayStr}T00:00:00`);
-          shouldReset =
-            todayDate.getMonth() !== completedAt.getMonth() ||
-            todayDate.getFullYear() !== completedAt.getFullYear();
-        } else if (cycle === 'yearly') {
-          const todayDate = new Date(`${todayStr}T00:00:00`);
-          shouldReset = todayDate.getFullYear() !== completedAt.getFullYear();
-        }
-
-        if (shouldReset) {
-          task.completed = false;
-          task.completedAt = undefined;
-          if (adminDetails.subtasks) {
-            adminDetails.subtasks.forEach((s) => {
-              s.completed = false;
-            });
+          if (cycle === 'weekly') {
+            const startOfWeek = (d: Date) => {
+              const c = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+              c.setDate(c.getDate() - c.getDay());
+              c.setHours(0, 0, 0, 0);
+              return c.getTime();
+            };
+            shouldReset = startOfWeek(todayDate) > startOfWeek(completedAt);
+          } else if (cycle === 'monthly') {
+            shouldReset =
+              todayDate.getMonth() !== completedAt.getMonth() ||
+              todayDate.getFullYear() !== completedAt.getFullYear();
+          } else if (cycle === 'yearly') {
+            shouldReset = todayDate.getFullYear() !== completedAt.getFullYear();
           }
-          hasChanged = true;
+
+          if (shouldReset) {
+            task.completed = false;
+            task.completedAt = undefined;
+            if (adminDetails.subtasks) {
+              adminDetails.subtasks.forEach((s) => {
+                s.completed = false;
+              });
+            }
+            hasChanged = true;
+          }
         }
       }
     }
 
     if (hasChanged) {
       modifiedCount++;
+      (task as any)._dailyResetModified = true;
+      if (typeof (task as any).markModified === 'function') {
+        (task as any).markModified('completed');
+        (task as any).markModified('habitDetails');
+        (task as any).markModified('adminDetails');
+      }
     }
 
     return task;

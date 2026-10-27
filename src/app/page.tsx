@@ -87,25 +87,53 @@ export default function Home() {
   const selectedDetailTask = tasks.items.find((t) => String(t._id) === selectedDetailTaskId) || null;
 
   const handleBuyFreeze = async () => {
-    dispatch(purchaseStreakFreeze());
     try {
-      await fetch('/api/vault/freeze', {
+      const res = await fetch('/api/vault/freeze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'BUY' }),
       });
-    } catch { /* local state updated */ }
+      const data = await res.json();
+      if (data.success) {
+        dispatch(
+          setUserVaultStats({
+            vaultBalance: data.vaultBalance,
+            totalPointsEarned: vault.totalPointsEarned,
+            streakFreezesCount: data.streakFreezesCount,
+            badges: vault.badges,
+          })
+        );
+      } else if (data.error) {
+        alert(data.error);
+      }
+    } catch (err) {
+      console.error('Failed to purchase streak freeze:', err);
+    }
   };
 
   const handleRedeem = async (rewardId: string) => {
-    dispatch(redeemVaultReward(rewardId));
     try {
-      await fetch('/api/vault/redeem', {
+      const res = await fetch('/api/vault/redeem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rewardId }),
       });
-    } catch { /* local state updated */ }
+      const data = await res.json();
+      if (data.success && data.user) {
+        dispatch(
+          setUserVaultStats({
+            vaultBalance: data.user.vaultBalance,
+            totalPointsEarned: data.user.totalPointsEarned,
+            streakFreezesCount: data.user.streakFreezesCount,
+            badges: data.user.badges,
+          })
+        );
+      } else if (data.error) {
+        alert(data.error);
+      }
+    } catch (err) {
+      console.error('Failed to redeem reward:', err);
+    }
   };
 
   const categoryTasks = tasks.items.filter((task) => {
@@ -117,6 +145,9 @@ export default function Home() {
   const completedTasks = categoryTasks.filter((t) => t.completed);
 
   const displayedTasks = taskStatusTab === 'pending' ? pendingTasks : completedTasks;
+
+  const categoryPendingCount = pendingTasks.length;
+  const categoryCompletedCount = completedTasks.length;
 
   const dailyFrog = tasks.items.find((t) => t.isFrog && !t.completed);
   const pendingCount = tasks.items.filter((t) => !t.completed).length;
@@ -448,7 +479,7 @@ export default function Home() {
                             : 'bg-surface-2 text-txt-3'
                         }`}
                       >
-                        {pendingCount}
+                        {categoryPendingCount}
                       </span>
                     </button>
 
@@ -470,7 +501,7 @@ export default function Home() {
                             : 'bg-surface-2 text-txt-3'
                         }`}
                       >
-                        {completedCount}
+                        {categoryCompletedCount}
                       </span>
                     </button>
                   </div>

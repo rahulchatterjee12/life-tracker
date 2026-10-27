@@ -90,10 +90,22 @@ export async function GET() {
       .sort({ createdAt: -1 })
       .limit(20);
 
+    const userRedeemedIds = new Set(
+      (user.badges || []).map((b: any) => String(b.rewardId))
+    );
+
+    const mappedRewards = rewards.map((r) => {
+      const obj = typeof r.toObject === 'function' ? r.toObject() : r;
+      return {
+        ...obj,
+        isRedeemed: Boolean(obj.isRedeemed || userRedeemedIds.has(String(r._id))),
+      };
+    });
+
     return NextResponse.json({
       success: true,
       user,
-      rewards,
+      rewards: mappedRewards,
       transactions,
     });
   } catch (error) {

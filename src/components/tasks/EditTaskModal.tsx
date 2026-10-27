@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import { updateTask } from '@/lib/features/tasks/tasksSlice';
 import { ITask, TaskImportance, HabitFrequency, AdminRecurringCycle } from '@/types/database';
-import { getMonthlyScheduledDays } from '@/lib/gamification/streaks';
+import { getMonthlyScheduledDays, getLocalDateString } from '@/lib/gamification/streaks';
 import { X, Calendar, Clock, Flame, Link as LinkIcon } from 'lucide-react';
 
 const WEEK_DAYS = [
@@ -78,11 +78,11 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
 
   // Admin fields
   const getInitialDueDate = () => {
-    if (!task.adminDetails?.dueDate) return '2026-10-28';
+    if (!task.adminDetails?.dueDate) return getLocalDateString();
     try {
-      return new Date(task.adminDetails.dueDate).toISOString().split('T')[0];
+      return getLocalDateString(new Date(task.adminDetails.dueDate));
     } catch {
-      return '2026-10-28';
+      return getLocalDateString();
     }
   };
 
@@ -139,11 +139,15 @@ function EditTaskForm({ task, onClose }: { task: ITask; onClose: () => void }) {
 
     // Persist to MongoDB API
     try {
-      await fetch('/api/tasks', {
+      const res = await fetch('/api/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatePayload),
       });
+      const data = await res.json();
+      if (data.success && data.task) {
+        dispatch(updateTask(data.task));
+      }
     } catch {
       // Local state is updated
     }

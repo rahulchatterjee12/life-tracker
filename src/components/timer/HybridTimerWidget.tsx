@@ -9,8 +9,8 @@ import {
   stopTimer,
   toggleZenMode,
 } from '@/lib/features/timer/timerSlice';
-import { completeDeepWorkTask } from '@/lib/features/tasks/tasksSlice';
-import { awardPoints } from '@/lib/features/vault/vaultSlice';
+import { completeDeepWorkTask, updateTask } from '@/lib/features/tasks/tasksSlice';
+import { awardPoints, setUserVaultStats } from '@/lib/features/vault/vaultSlice';
 import { calculateDeepWorkPoints } from '@/lib/gamification/engine';
 import { useMounted } from '@/lib/useMounted';
 import {
@@ -116,7 +116,7 @@ export default function HybridTimerWidget() {
     );
 
     try {
-      await fetch('/api/tasks/complete', {
+      const res = await fetch('/api/tasks/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -126,6 +126,13 @@ export default function HybridTimerWidget() {
           sessions: timer.splitSessions,
         }),
       });
+      const data = await res.json();
+      if (data.success && data.task) {
+        dispatch(updateTask(data.task));
+        if (data.user) {
+          dispatch(setUserVaultStats(data.user));
+        }
+      }
     } catch {
       // Local state is already updated
     }
@@ -190,7 +197,7 @@ export default function HybridTimerWidget() {
     );
 
     try {
-      await fetch('/api/tasks/complete', {
+      const res = await fetch('/api/tasks/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,6 +207,13 @@ export default function HybridTimerWidget() {
           sessions: manualSessions,
         }),
       });
+      const data = await res.json();
+      if (data.success && data.task) {
+        dispatch(updateTask(data.task));
+        if (data.user) {
+          dispatch(setUserVaultStats(data.user));
+        }
+      }
     } catch {
       // Local state updated
     }

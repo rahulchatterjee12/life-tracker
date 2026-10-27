@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppSelector } from '@/lib/hooks';
+import { getLocalDateString } from '@/lib/gamification/streaks';
 import {
   Flame,
   Check,
@@ -15,19 +16,17 @@ import {
 
 const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-const emptySubscribe = () => () => {};
-
 export default function HabitMatrixView() {
   const tasks = useAppSelector((state) => state.tasks.items);
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
   const [hoveredSegment, setHoveredSegment] = useState<'completed' | 'missed' | 'pending' | 'upcoming' | null>(null);
 
-  // Dynamic date calculations via useSyncExternalStore for hydration-safe server & client synchronization
-  const todayDateStr = useSyncExternalStore(
-    emptySubscribe,
-    () => new Date().toISOString().split('T')[0],
-    () => '2026-10-26'
-  );
+  // Dynamic date calculations deferred to useEffect for prerender safety
+  const [todayDateStr, setTodayDateStr] = useState<string>('2026-10-27');
+
+  useEffect(() => {
+    setTodayDateStr(getLocalDateString());
+  }, []);
 
   const [dateYear, dateMonthNum, dateDayNum] = todayDateStr.split('-').map(Number);
   const currentYear = dateYear || 2026;
@@ -101,18 +100,11 @@ export default function HabitMatrixView() {
   // Helper: check if a habit was completed on a specific day
   const isHabitCompletedOnDay = (habit: (typeof scheduledHabits)[0], day: number) => {
     const dateStr = `${MONTH_YEAR}-${String(day).padStart(2, '0')}`;
-    if (day === ACTIVE_DAY) {
-      return Boolean(
-        habit.completed ||
-        habit.habitDetails?.completedDates?.includes(dateStr) ||
-        habit.completionHistory?.some((e) => e.dateStr === dateStr) ||
-        habit.habitDetails?.lastCompletedDate === dateStr
-      );
-    }
     return Boolean(
       habit.habitDetails?.completedDates?.includes(dateStr) ||
       habit.completionHistory?.some((e) => e.dateStr === dateStr) ||
-      habit.habitDetails?.lastCompletedDate === dateStr
+      (habit.habitDetails?.lastCompletedDate === dateStr && habit.completed) ||
+      (habit.completed && habit.completedAt && getLocalDateString(new Date(habit.completedAt)) === dateStr)
     );
   };
 

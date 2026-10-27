@@ -56,7 +56,7 @@ export async function GET(request: Request) {
     if (modifiedCount > 0) {
       await Promise.all(
         (updatedTasks as any[]).map((t) => {
-          if (t && typeof t.isModified === 'function' && t.isModified()) {
+          if (t && (t._dailyResetModified || (typeof t.isModified === 'function' && t.isModified()))) {
             return t.save();
           }
           return Promise.resolve();
@@ -195,13 +195,25 @@ export async function PUT(request: Request) {
       task.markModified('habitDetails');
       task.markModified('habitDetails.completedDates');
     } else if (updates.completed === true) {
+      const wasAlreadyCompleted = task.completed;
       task.completed = true;
       task.completedAt = new Date();
+      const pointsToAward = updates.pointsAwarded || task.pointsAwarded || 25;
+      task.pointsAwarded = pointsToAward;
+
+      if (!wasAlreadyCompleted && pointsToAward > 0) {
+        const user = await User.findById(task.userId);
+        if (user) {
+          user.vaultBalance = (user.vaultBalance || 0) + pointsToAward;
+          user.totalPointsEarned = (user.totalPointsEarned || 0) + pointsToAward;
+          await user.save();
+        }
+      }
 
       const completionEvent: ITaskCompletionEvent = {
         completedAt: task.completedAt,
         dateStr: todayStr,
-        pointsAwarded: updates.pointsAwarded || task.pointsAwarded || 25,
+        pointsAwarded: pointsToAward,
         isFrog: Boolean(task.isFrog),
       };
 
@@ -301,6 +313,10 @@ export async function DELETE(request: Request) {
     }
 
     await Task.findByIdAndDelete(id);
+    await Task.updateMany(
+      { 'habitDetails.nextTaskId': id },
+      { $unset: { 'habitDetails.nextTaskId': 1 } }
+    );
 
     return NextResponse.json({
       success: true,

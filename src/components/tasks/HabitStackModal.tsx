@@ -5,7 +5,9 @@ import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import {
   closeHabitStackModal,
   toggleHabitCompletion,
+  updateTask,
 } from '@/lib/features/tasks/tasksSlice';
+import { setUserVaultStats } from '@/lib/features/vault/vaultSlice';
 import { startTimer } from '@/lib/features/timer/timerSlice';
 import { ArrowRight, X, Flame } from 'lucide-react';
 
@@ -40,7 +42,34 @@ export default function HabitStackModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId: nextTaskId }),
-      }).catch((err) => console.error('Failed to complete stacked habit:', err));
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.task) {
+            dispatch(updateTask(data.task));
+            if (data.user) {
+              dispatch(setUserVaultStats(data.user));
+            }
+          }
+        })
+        .catch((err) => console.error('Failed to complete stacked habit:', err));
+    } else if (nextTask.type === 'ADMIN') {
+      const nextTaskId = String(nextTask._id);
+      fetch('/api/tasks/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: nextTaskId }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.task) {
+            dispatch(updateTask(data.task));
+            if (data.user) {
+              dispatch(setUserVaultStats(data.user));
+            }
+          }
+        })
+        .catch((err) => console.error('Failed to complete stacked admin task:', err));
     }
 
     dispatch(closeHabitStackModal());

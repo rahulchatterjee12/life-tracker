@@ -12,6 +12,7 @@ import {
   calculateHabitStreak,
   applyDailyResetToTasks,
   getLocalDateString,
+  getMonthlyScheduledDays,
 } from '@/lib/gamification/streaks';
 
 export interface TasksState {
@@ -143,18 +144,20 @@ export const tasksSlice = createSlice({
         frequency: HabitFrequency;
         customDays?: number[];
         importance?: TaskImportance;
+        isFrog?: boolean;
         nextTaskId?: string;
       }>
     ) => {
+      const id = 'task-' + Date.now();
       const newTask: ITask = {
-        _id: ('task-' + Date.now()) as unknown as import('mongoose').Types.ObjectId,
+        _id: id as unknown as import('mongoose').Types.ObjectId,
         userId: 'user-default',
         title: action.payload.title,
         description: action.payload.description,
         url: action.payload.url,
         type: 'HABIT',
         importance: action.payload.importance || 3,
-        isFrog: false,
+        isFrog: !!action.payload.isFrog,
         completed: false,
         pointsAwarded: 0,
         habitDetails: {
@@ -162,11 +165,21 @@ export const tasksSlice = createSlice({
           customDays: action.payload.customDays || [],
           streakCount: 0,
           bestStreak: 0,
+          monthlyGoal: getMonthlyScheduledDays({
+            frequency: action.payload.frequency,
+            customDays: action.payload.customDays || [],
+          }),
           nextTaskId: action.payload.nextTaskId,
         },
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+
+      if (newTask.isFrog) {
+        state.items.forEach((t) => (t.isFrog = false));
+        state.dailyFrogId = id;
+      }
+
       state.items.unshift(newTask);
     },
 
@@ -181,6 +194,7 @@ export const tasksSlice = createSlice({
         recurringCycle?: AdminRecurringCycle;
         dayOfMonth?: number;
         importance?: TaskImportance;
+        isFrog?: boolean;
         subtasks?: Array<{ title: string; offsetDaysBeforeParent?: number }>;
       }>
     ) => {
@@ -191,15 +205,16 @@ export const tasksSlice = createSlice({
         offsetDaysBeforeParent: s.offsetDaysBeforeParent || 0,
       }));
 
+      const id = 'task-' + Date.now();
       const newTask: ITask = {
-        _id: ('task-' + Date.now()) as unknown as import('mongoose').Types.ObjectId,
+        _id: id as unknown as import('mongoose').Types.ObjectId,
         userId: 'user-default',
         title: action.payload.title,
         description: action.payload.description,
         url: action.payload.url,
         type: 'ADMIN',
         importance: action.payload.importance || 3,
-        isFrog: false,
+        isFrog: !!action.payload.isFrog,
         completed: false,
         pointsAwarded: 0,
         adminDetails: {
@@ -212,6 +227,12 @@ export const tasksSlice = createSlice({
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+
+      if (newTask.isFrog) {
+        state.items.forEach((t) => (t.isFrog = false));
+        state.dailyFrogId = id;
+      }
+
       state.items.unshift(newTask);
     },
 
@@ -401,6 +422,11 @@ export const tasksSlice = createSlice({
       if (state.dailyFrogId === action.payload) {
         state.dailyFrogId = null;
       }
+      state.items.forEach((t) => {
+        if (t.habitDetails && String(t.habitDetails.nextTaskId) === action.payload) {
+          t.habitDetails.nextTaskId = undefined;
+        }
+      });
     },
 
     updateTask: (state, action: PayloadAction<UpdateTaskPayload>) => {

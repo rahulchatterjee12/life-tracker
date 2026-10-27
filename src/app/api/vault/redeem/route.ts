@@ -47,14 +47,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Vault reward not found' }, { status: 404 });
     }
 
-    if (reward.isRedeemed) {
+    const user = await getTargetUser();
+
+    const isAlreadyRedeemedByUser =
+      reward.isRedeemed ||
+      (user.badges && user.badges.some((b: any) => String(b.rewardId) === String(reward._id)));
+
+    if (isAlreadyRedeemedByUser) {
       return NextResponse.json(
-        { success: false, error: 'This reward has already been redeemed.' },
+        { success: false, error: 'You have already redeemed this reward.' },
         { status: 400 }
       );
     }
-
-    const user = await getTargetUser();
 
     if (user.vaultBalance < reward.pointCost) {
       return NextResponse.json(
@@ -82,10 +86,12 @@ export async function POST(request: Request) {
     user.badges.push(newBadge);
     await user.save();
 
-    // 3. Mark reward redeemed
-    reward.isRedeemed = true;
-    reward.redeemedAt = new Date();
-    await reward.save();
+    // 3. Mark reward redeemed only if it belongs to this user specifically
+    if (reward.userId) {
+      reward.isRedeemed = true;
+      reward.redeemedAt = new Date();
+      await reward.save();
+    }
 
     // 4. Log double-entry transaction
     const transaction = await Transaction.create({

@@ -1,23 +1,34 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase, User, Task, Transaction } from '@/models';
+import { getSession } from '@/lib/auth';
 import { generateAIRetrospective } from '@/lib/ai/retrospective';
 
 const DEFAULT_USER_EMAIL = 'lead.engineer@lifemetric.app';
+
+async function getTargetUser() {
+  const session = await getSession();
+  if (session?.userId) {
+    const user = await User.findById(session.userId);
+    if (user) return user;
+  }
+
+  let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
+  if (!user) {
+    user = await User.create({
+      email: DEFAULT_USER_EMAIL,
+      name: 'Lead Architect',
+      vaultBalance: 0,
+      totalPointsEarned: 0,
+    });
+  }
+  return user;
+}
 
 export async function GET() {
   try {
     await connectToDatabase();
 
-    let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
-    if (!user) {
-      user = await User.create({
-        email: DEFAULT_USER_EMAIL,
-        name: 'Lead Architect',
-        vaultBalance: 0,
-        totalPointsEarned: 0,
-      });
-    }
-
+    const user = await getTargetUser();
     const tasks = await Task.find({ userId: user._id });
     const transactions = await Transaction.find({ userId: user._id }).sort({ createdAt: -1 });
 
@@ -40,13 +51,7 @@ export async function POST() {
   try {
     await connectToDatabase();
 
-    let user = await User.findOne({ email: DEFAULT_USER_EMAIL });
-    if (!user) {
-      user = await User.create({
-        email: DEFAULT_USER_EMAIL,
-        name: 'Lead Architect',
-      });
-    }
+    const user = await getTargetUser();
 
     // Get 7-day window
     const oneWeekAgo = new Date(Date.now() - 7 * 86400000);

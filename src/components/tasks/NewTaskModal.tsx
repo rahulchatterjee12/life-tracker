@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppDispatch, useAppSelector } from '@/lib/hooks';
 import {
@@ -10,7 +10,7 @@ import {
   addAdminTask,
 } from '@/lib/features/tasks/tasksSlice';
 import { TaskType, TaskImportance, HabitFrequency, AdminRecurringCycle } from '@/types/database';
-import { getMonthlyScheduledDays } from '@/lib/gamification/streaks';
+import { getMonthlyScheduledDays, getLocalDateString } from '@/lib/gamification/streaks';
 import { X, Calendar, Clock, Flame, Link as LinkIcon } from 'lucide-react';
 
 const WEEK_DAYS = [
@@ -48,11 +48,15 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
   const [nextTaskId, setNextTaskId] = useState<string>('');
 
   // Admin fields
-  const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [dueDate, setDueDate] = useState<string>('2026-10-27');
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringCycle, setRecurringCycle] = useState<AdminRecurringCycle>('monthly');
   const [subtasks, setSubtasks] = useState<Array<{ title: string; offsetDaysBeforeParent: number }>>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+
+  useEffect(() => {
+    setDueDate(getLocalDateString());
+  }, []);
 
   if (!isOpen) return null;
 
@@ -118,6 +122,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
           frequency: computedFreq,
           customDays: selectedDays,
           importance,
+          isFrog,
           nextTaskId: nextTaskId || undefined,
         })
       );
@@ -131,6 +136,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
           isRecurring,
           recurringCycle: isRecurring ? recurringCycle : 'none',
           importance,
+          isFrog,
           subtasks,
         })
       );
@@ -152,7 +158,7 @@ export default function NewTaskModal({ isOpen, onClose }: NewTaskModalProps) {
       url: url.trim() || undefined,
       type,
       importance,
-      isFrog: type === 'DEEP_WORK' ? isFrog : false,
+      isFrog: Boolean(isFrog),
     };
 
     if (type === 'DEEP_WORK') {

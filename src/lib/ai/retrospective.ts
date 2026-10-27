@@ -33,9 +33,25 @@ export function compileWeeklyMetrics(
   tasks: ITask[],
   transactions: ITransaction[] = []
 ): WeeklyMetrics {
+  const oneWeekAgo = new Date(Date.now() - 7 * 86400000);
+  const oneWeekAgoStr = `${oneWeekAgo.getFullYear()}-${String(oneWeekAgo.getMonth() + 1).padStart(2, '0')}-${String(oneWeekAgo.getDate()).padStart(2, '0')}`;
+
   const deepWorkTasks = tasks.filter((t) => t.type === 'DEEP_WORK' && t.completed);
-  const habitTasks = tasks.filter((t) => t.type === 'HABIT' && t.completed);
   const frogTasks = tasks.filter((t) => t.isFrog && t.completed);
+
+  // Count total habit completions across the 7-day retrospective window
+  let totalHabitsCompleted = 0;
+  tasks
+    .filter((t) => t.type === 'HABIT')
+    .forEach((t) => {
+      if (t.completionHistory && t.completionHistory.length > 0) {
+        totalHabitsCompleted += t.completionHistory.filter((e) => e.dateStr >= oneWeekAgoStr).length;
+      } else if (t.habitDetails?.completedDates && t.habitDetails.completedDates.length > 0) {
+        totalHabitsCompleted += t.habitDetails.completedDates.filter((d) => d >= oneWeekAgoStr).length;
+      } else if (t.completed) {
+        totalHabitsCompleted += 1;
+      }
+    });
 
   const totalDeepWorkSeconds = deepWorkTasks.reduce(
     (acc, t) => acc + (t.deepWorkDetails?.actualDurationSeconds || 0),
@@ -76,7 +92,7 @@ export function compileWeeklyMetrics(
     manualLoggedSessionsCount: manualSessions.length,
     liveFocusRatioPercentage: liveRatio,
     overtimeBonusSessionsCount: overtimeSessions.length,
-    totalHabitsCompleted: habitTasks.length,
+    totalHabitsCompleted: totalHabitsCompleted,
     bestActiveStreak: bestStreak,
     frogCompletedCount: frogTasks.length,
     frogCompletedBeforeNoonCount: frogBeforeNoon,
