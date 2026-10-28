@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth, OtpActionType } from '@/components/providers/AuthProvider';
 import {
@@ -21,6 +22,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultMode?: 'signin' | 'signup';
+  onSuccess?: () => void;
 }
 
 type AuthModalView =
@@ -34,7 +36,9 @@ export default function AuthModal({
   isOpen,
   onClose,
   defaultMode = 'signin',
+  onSuccess,
 }: AuthModalProps) {
+  const router = useRouter();
   const { login, sendOtp, verifyOtp } = useAuth();
   const [view, setView] = useState<AuthModalView>(defaultMode);
 
@@ -83,7 +87,9 @@ export default function AuthModal({
     setIsSubmitting(false);
 
     if (res.success) {
+      onSuccess?.();
       onClose();
+      router.push('/dashboard');
     } else {
       setError(res.error || 'Invalid email or password');
     }
@@ -136,7 +142,9 @@ export default function AuthModal({
     setIsSubmitting(false);
 
     if (res.success) {
+      onSuccess?.();
       onClose();
+      router.push('/dashboard');
     } else {
       setError(res.error || 'Invalid or expired verification code');
     }
@@ -189,7 +197,9 @@ export default function AuthModal({
     setIsSubmitting(false);
 
     if (res.success) {
+      onSuccess?.();
       onClose();
+      router.push('/dashboard');
     } else {
       setError(res.error || 'Failed to reset password');
     }
